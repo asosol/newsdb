@@ -11,7 +11,8 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for
 
 from news_scraper import PRNewswireScraper, NewsArticle
 from stock_data import StockDataFetcher
-from database import NewsDatabase
+from models import db, Article, Ticker, FloatData
+from pg_database import NewsDatabase
 
 # Set up logging
 logging.basicConfig(
@@ -23,10 +24,25 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
 
-# Initialize database and services
-db = NewsDatabase()
+# Configure the PostgreSQL database
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_recycle": 300,
+    "pool_pre_ping": True,
+}
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+# Initialize the app with the database extension
+db.init_app(app)
+
+# Create all database tables
+with app.app_context():
+    db.create_all()
+
+# Initialize services
 scraper = PRNewswireScraper()
 stock_fetcher = StockDataFetcher()
+database = NewsDatabase()
 
 # Background data fetcher
 class BackgroundDataFetcher:
@@ -86,7 +102,7 @@ class BackgroundDataFetcher:
                     # Save articles to database
                     self.status = "Saving articles to database..."
                     for article in articles:
-                        db.save_article(article)
+                        database.save_article(article)
                     
                     self.progress = 90
                 
@@ -109,7 +125,7 @@ data_fetcher = BackgroundDataFetcher()
 def index():
     """Render the home page with recent news articles."""
     # Get recent articles from database
-    articles = db.get_recent_articles(limit=100)
+    articles = database.get_recent_articles(limit=100)
     
     # Get status information
     status = {
@@ -123,7 +139,7 @@ def index():
 @app.route('/article/<int:article_id>')
 def article_detail(article_id):
     """Render the article detail page."""
-    article = db.get_article_by_id(article_id)
+    article = database.get_article_by_id(article_id)
     if not article:
         return redirect(url_for('index'))
     
@@ -154,10 +170,10 @@ def refresh_data():
             
             # Save articles to database
             for article in articles:
-                db.save_article(article)
+                database.save_article(article)
         
         # Get updated articles from database
-        db_articles = db.get_recent_articles()
+        db_articles = database.get_recent_articles()
         
         return jsonify({
             'status': f'Updated {len(articles)} articles',
