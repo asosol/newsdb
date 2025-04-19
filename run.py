@@ -59,7 +59,14 @@ def article_detail(article_id):
     if not article:
         return redirect(url_for('index'))
     
-    return render_template('article_detail.html', article=article)
+    # Status information to match what's expected by the layout template
+    status = {
+        'message': 'Viewing article details',
+        'progress': 100,
+        'last_update': 'N/A'
+    }
+    
+    return render_template('article_detail.html', article=article, status=status)
 
 @app.route('/api/refresh', methods=['POST'])
 def refresh_data():
