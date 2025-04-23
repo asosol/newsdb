@@ -2,5 +2,6 @@ flask
 requests
 yfinance
 beautifulsoup4
+Flask-SQLAlchemy
 trafilatura
 zoneinfo; python_version < "3.9"
