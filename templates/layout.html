@@ -125,15 +125,15 @@
             const refreshButton = document.getElementById('refreshButton');
             const loadingOverlay = document.getElementById('loadingOverlay');
             const loadingMessage = document.getElementById('loadingMessage');
-            
+
             if (refreshButton) {
                 refreshButton.addEventListener('click', function(e) {
                     e.preventDefault();
-                    
+
                     // Show loading overlay
                     loadingOverlay.style.display = 'flex';
                     loadingMessage.textContent = 'Refreshing data...';
-                    
+
                     // Call the refresh API endpoint
                     fetch('/api/refresh', {
                         method: 'POST',
@@ -144,7 +144,7 @@
                     .then(response => response.json())
                     .then(data => {
                         loadingMessage.textContent = data.status;
-                        
+
                         // Reload the page after a short delay
                         setTimeout(() => {
                             window.location.reload();
@@ -153,7 +153,7 @@
                     .catch(error => {
                         console.error('Error:', error);
                         loadingMessage.textContent = 'Error refreshing data. Please try again.';
-                        
+
                         // Hide loading overlay after a delay
                         setTimeout(() => {
                             loadingOverlay.style.display = 'none';
@@ -161,7 +161,7 @@
                     });
                 });
             }
-            
+
             // Status update functionality
             function updateStatus() {
                 fetch('/api/status')
@@ -170,7 +170,7 @@
                         const statusMessage = document.getElementById('statusMessage');
                         const progressBar = document.getElementById('progressBar');
                         const lastUpdate = document.getElementById('lastUpdate');
-                        
+
                         if (statusMessage) statusMessage.textContent = data.message;
                         if (progressBar) progressBar.style.width = data.progress + '%';
                         if (lastUpdate && data.last_update) {
@@ -180,7 +180,7 @@
                     })
                     .catch(error => console.error('Error fetching status:', error));
             }
-            
+
             // Update status every 5 seconds
             setInterval(updateStatus, 5000);
         });

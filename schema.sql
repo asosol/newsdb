@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS articles (
     summary TEXT,
     url TEXT UNIQUE NOT NULL,
     published_date TEXT,
+    published_time TIME,
     created_at TEXT NOT NULL
 );
 

@@ -1,150 +1,159 @@
 """
 Module for PostgreSQL database operations to store and retrieve news articles.
 """
-import os
 import logging
 from datetime import datetime
-import json
-
 from models import db, Article, Ticker, FloatData
 from news_scraper import NewsArticle
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 class NewsDatabase:
-    """Class for database operations related to news articles."""
-    
+    """Class to handle saving and loading news articles and float data."""
+
     def __init__(self):
-        """Initialize the database."""
-        logger.info("Database initialized")
-    
-    def save_article(self, article):
-        """Save a news article to the database."""
+        logger.info("NewsDatabase initialized")
+
+    def save_article(self, article: NewsArticle):
         try:
-            # Check if article already exists
-            existing_article = Article.query.filter_by(url=article.url).first()
-            if existing_article:
+            existing = Article.query.filter_by(url=article.url).first()
+            if existing:
                 logger.debug(f"Article already exists: {article.url}")
-                return existing_article.id
-            
-            # Create new article
+                return existing.id
+
             new_article = Article(
                 title=article.title,
                 summary=article.summary,
                 url=article.url,
-                published_date=article.published_date if isinstance(article.published_date, datetime) else None
+                published_date=article.published_date,
+                published_time=article.published_time
             )
-            
-            # Process tickers
-            for ticker_symbol in article.tickers:
-                # Check if ticker exists
-                ticker = Ticker.query.filter_by(symbol=ticker_symbol).first()
+
+            for sym in article.tickers:
+                ticker = Ticker.query.filter_by(symbol=sym).first()
                 if not ticker:
-                    ticker = Ticker(symbol=ticker_symbol)
+                    ticker = Ticker(symbol=sym)
                     db.session.add(ticker)
-                    db.session.flush()  # Flush to get the ticker ID
-                
+                    db.session.flush()
                 new_article.tickers.append(ticker)
-            
+
             db.session.add(new_article)
             db.session.commit()
-            
-            # Process float data
-            if article.float_data:
-                for ticker_symbol, data in article.float_data.items():
-                    self.update_float_data(ticker_symbol, data)
-            
-            logger.info(f"Saved article with ID {new_article.id}")
+            logger.info(f"Saved Article ID {new_article.id}")
+
+            for sym, data in article.float_data.items():
+                self.update_float_data(sym, data)
+
             return new_article.id
-            
+
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error saving article: {e}")
             return None
-    
-    def get_recent_articles(self, limit=100):
-        """Get recent articles from the database."""
+
+    def get_recent_articles(self, page=1, page_size=100):
         try:
-            # Get articles with tickers
-            articles = db.session.query(Article).order_by(Article.created_at.desc()).limit(limit).all()
-            
+            offset = (page - 1) * page_size
+            records = (
+                db.session.query(Article)
+                .order_by(
+                    Article.published_date.desc(),
+                    Article.published_time.desc()
+                )
+                .offset(offset)
+                .limit(page_size)
+                .all()
+            )
+
             result = []
-            for article in articles:
-                article_dict = article.to_dict()
-                
-                # Get float data for tickers
-                float_data = {}
-                for ticker_symbol in article_dict['tickers']:
-                    ticker_float = FloatData.query.filter_by(ticker_symbol=ticker_symbol).first()
-                    if ticker_float:
-                        float_data[ticker_symbol] = ticker_float.to_dict()
-                
-                article_dict['float_data'] = float_data
-                result.append(article_dict)
-            
+            for art in records:
+                d = art.to_dict()
+                float_map = {}
+                for sym in d['tickers']:
+                    fd = FloatData.query.filter_by(ticker_symbol=sym).first()
+                    if fd:
+                        float_map[sym] = fd.to_dict()
+                d['float_data'] = float_map
+                result.append(d)
+
             return result
-            
         except Exception as e:
             logger.error(f"Error getting recent articles: {e}")
             return []
-    
+
     def get_article_by_id(self, article_id):
-        """Get a specific article by ID."""
         try:
-            article = Article.query.get(article_id)
-            if not article:
+            art = Article.query.get(article_id)
+            if not art:
                 return None
-            
-            article_dict = article.to_dict()
-            
-            # Get float data for tickers
-            float_data = {}
-            for ticker_symbol in article_dict['tickers']:
-                ticker_float = FloatData.query.filter_by(ticker_symbol=ticker_symbol).first()
-                if ticker_float:
-                    float_data[ticker_symbol] = ticker_float.to_dict()
-            
-            article_dict['float_data'] = float_data
-            return article_dict
-            
+            d = art.to_dict()
+            float_map = {}
+            for sym in d['tickers']:
+                fd = FloatData.query.filter_by(ticker_symbol=sym).first()
+                if fd:
+                    float_map[sym] = fd.to_dict()
+            d['float_data'] = float_map
+            return d
         except Exception as e:
-            logger.error(f"Error getting article by ID: {e}")
+            logger.error(f"Error fetching article {article_id}: {e}")
             return None
-    
+
     def update_float_data(self, ticker_symbol, float_data):
-        """Update float data for a ticker."""
         try:
-            # Find ticker
             ticker = Ticker.query.filter_by(symbol=ticker_symbol).first()
             if not ticker:
                 ticker = Ticker(symbol=ticker_symbol)
                 db.session.add(ticker)
                 db.session.flush()
-            
-            # Update or create float data
-            ticker_float = FloatData.query.filter_by(ticker_symbol=ticker_symbol).first()
-            if not ticker_float:
-                ticker_float = FloatData(
+
+            fd = FloatData.query.filter_by(ticker_symbol=ticker_symbol).first()
+            if not fd:
+                fd = FloatData(
                     ticker_id=ticker.id,
                     ticker_symbol=ticker_symbol,
-                    company_name=float_data.get('name', 'N/A'),
-                    float_value=float_data.get('float', 'N/A'),
-                    price=float_data.get('price', 'N/A'),
-                    market_cap=float_data.get('market_cap', 'N/A')
+                    company_name=float_data.get('name'),
+                    float_value=float_data.get('float'),
+                    price=float_data.get('price'),
+                    market_cap=float_data.get('market_cap')
                 )
-                db.session.add(ticker_float)
+                db.session.add(fd)
             else:
-                ticker_float.company_name = float_data.get('name', 'N/A')
-                ticker_float.float_value = float_data.get('float', 'N/A')
-                ticker_float.price = float_data.get('price', 'N/A')
-                ticker_float.market_cap = float_data.get('market_cap', 'N/A')
-                ticker_float.updated_at = datetime.utcnow()
-            
+                fd.company_name = float_data.get('name')
+                fd.float_value = float_data.get('float')
+                fd.price = float_data.get('price')
+                fd.market_cap = float_data.get('market_cap')
+                fd.updated_at = datetime.utcnow()
+
             db.session.commit()
-            logger.debug(f"Updated float data for {ticker_symbol}")
+            logger.debug(f"Float data updated for {ticker_symbol}")
             return True
-            
+
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error updating float data: {e}")
+            logger.error(f"Error updating float data for {ticker_symbol}: {e}")
             return False
+
+    def clear_articles(self):
+        try:
+            db.session.query(Article).delete()
+            db.session.query(Ticker).delete()
+            db.session.query(FloatData).delete()
+            db.session.commit()
+            logger.info("All articles, tickers, and float data cleared.")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to clear articles: {e}")
+
+
+class ArticleObject:
+    def __init__(self, title, summary, url, published_date, published_time, tickers=None):
+        self.title = title
+        self.summary = summary
+        self.url = url
+        self.published_date = published_date
+        self.published_time = published_time
+        self.tickers = tickers or []
+        self.float_data = {}
+        self.id = None

@@ -2,12 +2,14 @@
 Database models for the stock news monitoring application.
 """
 import os
-from datetime import datetime
+from datetime import datetime, date, time
 from flask_sqlalchemy import SQLAlchemy
 
+
+# Initialize SQLAlchemy
 db = SQLAlchemy()
 
-# Association table for articles and tickers (many-to-many relationship)
+# Association table for many-to-many between articles and tickers
 article_tickers = db.Table(
     'article_tickers',
     db.Column('article_id', db.Integer, db.ForeignKey('articles.id', ondelete='CASCADE'), primary_key=True),
@@ -17,50 +19,53 @@ article_tickers = db.Table(
 class Article(db.Model):
     """Model for news articles."""
     __tablename__ = 'articles'
-    
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(500), nullable=False)
     summary = db.Column(db.Text)
     url = db.Column(db.String(1000), unique=True, nullable=False)
-    published_date = db.Column(db.DateTime)
+
+    # Separate date and time columns
+    published_date = db.Column(db.Date, nullable=True)
+    published_time = db.Column(db.Time, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationship with tickers
-    tickers = db.relationship('Ticker', secondary=article_tickers, 
-                             backref=db.backref('articles', lazy='dynamic'))
-    
+
+    # Relationship to tickers
+    tickers = db.relationship(
+        'Ticker', secondary=article_tickers,
+        backref=db.backref('articles', lazy='dynamic')
+    )
+
     def __repr__(self):
         return f"<Article {self.id}: {self.title[:30]}...>"
-    
+
     def to_dict(self):
-        """Convert article to dictionary."""
+        """Convert article to dictionary for JSON/template usage."""
         return {
             'id': self.id,
             'title': self.title,
             'summary': self.summary,
             'url': self.url,
+            # isoformat date & HH:MM time
             'published_date': self.published_date.isoformat() if self.published_date else None,
+            'published_time': self.published_time.strftime('%H:%M') if self.published_time else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'tickers': [ticker.symbol for ticker in self.tickers]
+            'tickers': [t.symbol for t in self.tickers]
         }
 
 class Ticker(db.Model):
     """Model for stock tickers."""
     __tablename__ = 'tickers'
-    
     id = db.Column(db.Integer, primary_key=True)
     symbol = db.Column(db.String(20), unique=True, nullable=False)
-    
-    # Relationship with float data
+    # one-to-one to float data
     float_data = db.relationship('FloatData', backref='ticker', uselist=False)
-    
+
     def __repr__(self):
         return f"<Ticker {self.symbol}>"
 
 class FloatData(db.Model):
     """Model for stock float data."""
     __tablename__ = 'float_data'
-    
     id = db.Column(db.Integer, primary_key=True)
     ticker_id = db.Column(db.Integer, db.ForeignKey('tickers.id', ondelete='CASCADE'), unique=True)
     ticker_symbol = db.Column(db.String(20), unique=True, nullable=False)
@@ -69,12 +74,11 @@ class FloatData(db.Model):
     price = db.Column(db.String(50))
     market_cap = db.Column(db.String(50))
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     def __repr__(self):
         return f"<FloatData {self.ticker_symbol}>"
-    
+
     def to_dict(self):
-        """Convert float data to dictionary."""
         return {
             'name': self.company_name,
             'float': self.float_value,

@@ -81,19 +81,11 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <span>
                         <i class="bi bi-calendar"></i> Published: 
-                        {% if article.published_date %}
-                            {{ article.published_date.split('T')[0] if 'T' in article.published_date else article.published_date }}
-                        {% else %}
-                            N/A
-                        {% endif %}
+                        {{ article.published_date.strftime('%Y-%m-%d') if article.published_date else 'N/A' }}
                     </span>
                     <span>
-                        <i class="bi bi-clock"></i> Added: 
-                        {% if article.created_at %}
-                            {{ article.created_at.split('T')[0] if 'T' in article.created_at else article.created_at }}
-                        {% else %}
-                            N/A
-                        {% endif %}
+                        <i class="bi bi-clock"></i> Published Time:
+                        {{ article.published_time.strftime('%H:%M') if article.published_time else 'N/A' }}
                     </span>
                 </div>
             </div>

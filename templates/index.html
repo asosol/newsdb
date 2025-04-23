@@ -1,19 +1,40 @@
 {% extends "layout.html" %}
-
 {% block title %}Stock News Monitor - Home{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h4 class="mb-0"><i class="bi bi-newspaper"></i> Financial News with Stock Tickers</h4>
-                <div>
-                    <button class="btn btn-outline-secondary btn-sm" id="refreshNewsBtn">
+
+                <!-- Filter Form -->
+                <form class="d-flex align-items-center gap-2" method="get" action="/">
+                    <label class="form-label mb-0 fw-bold">Float Filter:</label>
+                    <select class="form-select form-select-sm" name="filter_op" style="width: auto;">
+                        <option value="lt" {% if filter_op == 'lt' %}selected{% endif %}>Less Than</option>
+                        <option value="gt" {% if filter_op == 'gt' %}selected{% endif %}>Greater Than</option>
+                    </select>
+                    <input type="number" name="float_val" step="1" class="form-control form-control-sm" placeholder="Value in M" value="{{ filter_val or '' }}" style="width: 120px;">
+                    <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+                    <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+                </form>
+
+                <!-- Manual Refresh -->
+                <form method="post" action="/api/refresh">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">
                         <i class="bi bi-arrow-clockwise"></i> Refresh Now
                     </button>
-                </div>
+                </form>
+
+                <!-- Clear All Articles -->
+                <form method="post" action="/clear" class="ms-2" onsubmit="return confirm('Are you sure you want to delete all articles? This action is irreversible.')">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <i class="bi bi-trash"></i> Clear All
+                    </button>
+                </form>
             </div>
+
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover news-table mb-0">
@@ -23,7 +44,8 @@
                                 <th style="width: 10%">Float</th>
                                 <th style="width: 10%">Price</th>
                                 <th>Headline</th>
-                                <th style="width: 15%">Date</th>
+                                <th style="width: 12%">Date</th>
+                                <th style="width: 8%">Time</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -32,49 +54,39 @@
                                     <tr class="article-row" data-article-id="{{ article.id }}">
                                         <td>
                                             {% if article.tickers %}
-                                                {% for ticker in article.tickers[:1] %}
-                                                    <span class="ticker-badge">{{ ticker }}</span>
-                                                    {% if article.tickers|length > 1 %}
-                                                        <span class="badge bg-secondary">+{{ article.tickers|length - 1 }}</span>
-                                                    {% endif %}
-                                                {% endfor %}
+                                                <span class="ticker-badge">{{ article.tickers[0] }}</span>
+                                                {% if article.tickers|length > 1 %}
+                                                    <span class="badge bg-secondary">+{{ article.tickers|length - 1 }}</span>
+                                                {% endif %}
                                             {% else %}
                                                 <span class="text-muted">N/A</span>
                                             {% endif %}
                                         </td>
                                         <td>
-                                            {% if article.tickers and article.float_data and article.tickers[0] in article.float_data %}
-                                                <span class="float-value">{{ article.float_data[article.tickers[0]].float }}</span>
-                                            {% else %}
-                                                <span class="text-muted">N/A</span>
-                                            {% endif %}
+                                            {% set fdata = article.float_data.get(article.tickers[0]) %}
+                                            {{ fdata.float if fdata else 'N/A' }}
                                         </td>
                                         <td>
-                                            {% if article.tickers and article.float_data and article.tickers[0] in article.float_data %}
-                                                <span class="price-value">{{ article.float_data[article.tickers[0]].price }}</span>
-                                            {% else %}
-                                                <span class="text-muted">N/A</span>
-                                            {% endif %}
+                                            {{ fdata.price if fdata else 'N/A' }}
                                         </td>
                                         <td>
                                             <a href="{{ url_for('article_detail', article_id=article.id) }}" class="text-decoration-none">
                                                 {{ article.title }}
                                             </a>
                                         </td>
-                                        <td class="text-muted">
-                                            {% if article.published_date %}
-                                                {{ article.published_date.split('T')[0] if 'T' in article.published_date else article.published_date }}
-                                            {% else %}
-                                                N/A
-                                            {% endif %}
+                                        <td>
+                                            <span class="text-muted">{{ article.published_date or 'N/A' }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="text-muted">{{ article.published_time or 'N/A' }}</span>
                                         </td>
                                     </tr>
                                 {% endfor %}
                             {% else %}
                                 <tr>
-                                    <td colspan="5" class="text-center py-4">
+                                    <td colspan="6" class="text-center py-4">
                                         <div class="text-muted">
-                                            <i class="bi bi-exclamation-circle me-2"></i>No articles found. Please wait for the data fetcher to retrieve some news.
+                                            <i class="bi bi-exclamation-circle me-2"></i>No articles found. Please refresh or wait for auto-fetch.
                                         </div>
                                     </td>
                                 </tr>
@@ -86,27 +98,38 @@
         </div>
     </div>
 </div>
+
+<!-- Pagination Controls -->
+<div class="d-flex justify-content-center my-4">
+    <nav>
+        <ul class="pagination">
+            {% if page > 1 %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('index', page=page-1, float_val=filter_val, filter_op=filter_op) }}">Previous</a>
+            </li>
+            {% endif %}
+            <li class="page-item disabled">
+                <span class="page-link">Page {{ page }}</span>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('index', page=page+1, float_val=filter_val, filter_op=filter_op) }}">Next</a>
+            </li>
+        </ul>
+    </nav>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Make table rows clickable to go to article detail page
-        const articleRows = document.querySelectorAll('.article-row');
-        articleRows.forEach(row => {
-            row.addEventListener('click', function() {
-                const articleId = this.getAttribute('data-article-id');
-                window.location.href = `/article/${articleId}`;
+    document.addEventListener('DOMContentLoaded', function () {
+        const rows = document.querySelectorAll('.article-row');
+        rows.forEach(row => {
+            row.style.cursor = 'pointer';
+            row.addEventListener('click', function () {
+                const id = this.getAttribute('data-article-id');
+                window.location.href = `/article/${id}`;
             });
         });
-        
-        // Connect the refresh button
-        const refreshNewsBtn = document.getElementById('refreshNewsBtn');
-        if (refreshNewsBtn) {
-            refreshNewsBtn.addEventListener('click', function() {
-                document.getElementById('refreshButton').click();
-            });
-        }
     });
 </script>
 {% endblock %}

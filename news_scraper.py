@@ -1,247 +1,200 @@
-#!/usr/bin/env python3
-"""
-Module for scraping financial news from PRNewswire.
-"""
 import re
 import logging
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime, date, time
+import time as tmod
 import trafilatura
-from datetime import datetime
-import time
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class NewsArticle:
     """Class representing a news article with financial information."""
-    
-    def __init__(self, title, summary, url, published_date, tickers=None):
+    def __init__(self, title, summary, url, published_date: date, published_time: time, tickers=None):
         self.title = title
         self.summary = summary
         self.url = url
-        self.published_date = published_date
+        self.published_date = published_date  # datetime.date
+        self.published_time = published_time  # datetime.time
         self.tickers = tickers or []
-        self.float_data = {}  # Will be populated later
-        
+        self.float_data = {}
+
     def __str__(self):
-        return f"{self.title} - {', '.join(self.tickers) if self.tickers else 'No tickers'}"
+        time_str = self.published_time.strftime('%H:%M') if self.published_time else ''
+        date_str = self.published_date.isoformat() if self.published_date else ''
+        tickers = ','.join(self.tickers) if self.tickers else 'No tickers'
+        return f"{date_str} {time_str} — {self.title} [{tickers}]"
 
 class PRNewswireScraper:
-    """Class for scraping financial news from PRNewswire."""
-    
-    BASE_URL = "https://www.prnewswire.com/news-releases/financial-services-latest-news/financial-services-latest-news-list/"
-    
-    def __init__(self):
-        self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    """Class for scraping paginated news releases from PRNewswire."""
+    BASE_URL = (
+        "https://www.prnewswire.com/news-releases/financial-services-latest-news/"
+        "financial-services-latest-news-list/"
+    )
+
+    def __init__(self, headers=None):
+        self.headers = headers or {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/91.0.4472.124 Safari/537.36"
+            )
         }
-    
-    def get_latest_news(self):
-        """Fetch and parse the latest financial news from PRNewswire."""
-        try:
-            # Try getting a couple of different financial news URLs from PRNewswire
-            urls_to_try = [
-                self.BASE_URL,
-                "https://www.prnewswire.com/news-releases/financial-services-latest-news/",
-                "https://www.prnewswire.com/news/financial-services/",
-                "https://www.prnewswire.com/news-releases/financial-news/",
-                "https://www.prnewswire.com/news-releases/"
-            ]
-            
-            articles = []
-            for url in urls_to_try:
-                try:
-                    response = requests.get(url, headers=self.headers, timeout=30)
-                    response.raise_for_status()
-                    
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    
-                    # Try different CSS selectors as the site structure might vary
-                    selectors = [
-                        '.card-list-item',                  # Common card layout
-                        '.news-release-item',              # Alternative item layout
-                        '.release-card',                   # Another possible class
-                        '.news-card',                      # Generic news card
-                        'article',                         # Generic article tag
-                        '.container .col-sm-9 .row > div'  # Grid layout container
-                    ]
-                    
-                    for selector in selectors:
-                        news_items = soup.select(selector)
-                        if news_items:
-                            logger.info(f"Found {len(news_items)} items with selector '{selector}' at URL: {url}")
-                            break
-                    
-                    for item in news_items:
-                        try:
-                            # Try different ways to extract the title
-                            title_selectors = ['.card-title', 'h3', '.headline', 'h2', 'h4', 'a.news-title']
-                            title_elem = None
-                            for title_selector in title_selectors:
-                                title_elem = item.select_one(title_selector)
-                                if title_elem:
-                                    break
-                            
-                            if not title_elem:
-                                continue
-                            
-                            title = title_elem.text.strip()
-                            logger.info(f"Found article title: {title}")
-                            
-                            # Look for a link - it might be in the title or somewhere else
-                            link_elem = None
-                            if title_elem.name == 'a':
-                                link_elem = title_elem
-                            else:
-                                link_elem = title_elem.find('a') or item.find('a')
-                            
-                            if not link_elem or not link_elem.get('href'):
-                                continue
-                            
-                            url = link_elem['href']
-                            if not url.startswith('http'):
-                                url = f"https://www.prnewswire.com{url}"
-                            
-                            # Try to find the date
-                            date_selectors = ['.card-date', '.date', '.timestamp', '.time', 'time']
-                            date_elem = None
-                            for date_selector in date_selectors:
-                                date_elem = item.select_one(date_selector)
-                                if date_elem:
-                                    break
-                            
-                            published_date = datetime.now()
-                            if date_elem:
-                                date_str = date_elem.text.strip()
-                                try:
-                                    # Try a few date formats
-                                    date_formats = ['%b %d, %Y', '%B %d, %Y', '%m/%d/%Y', '%Y-%m-%d']
-                                    for fmt in date_formats:
-                                        try:
-                                            published_date = datetime.strptime(date_str, fmt)
-                                            break
-                                        except ValueError:
-                                            continue
-                                except Exception:
-                                    logger.warning(f"Could not parse date: {date_str}")
-                            
-                            # Get article content
-                            summary = self.get_article_content(url)
-                            
-                            # Extract tickers - add finance-related keywords to the content
-                            # to increase chances of finding tickers
-                            enriched_text = title + " " + summary + " NYSE NASDAQ financial stock market investment banking"
-                            tickers = self.extract_tickers(enriched_text)
-                            
-                            # Add some common financial tickers if none found
-                            if not tickers and ("financ" in title.lower() or "bank" in title.lower() or 
-                                               "invest" in title.lower() or "market" in title.lower()):
-                                # Top 10 financial companies by market cap
-                                possible_tickers = ["JPM", "BAC", "WFC", "C", "GS", "MS", "BLK", "AXP", "SCHW", "USB"]
-                                
-                                # Extract words that might be tickers (all caps, 2-5 letters)
-                                word_matches = re.findall(r'\b([A-Z]{2,5})\b', title + " " + summary)
-                                for word in word_matches:
-                                    if word in possible_tickers:
-                                        tickers.append(word)
-                                
-                                # If still no tickers, add JPM as a default for finance-related news
-                                if not tickers:
-                                    # Look for financial keywords to determine if we should add a default ticker
-                                    finance_keywords = ["bank", "finance", "financial", "invest", "stock", "market", 
-                                                        "capital", "asset", "equity", "fund", "wealth", "money"]
-                                    
-                                    for keyword in finance_keywords:
-                                        if keyword in title.lower() or keyword in summary.lower():
-                                            logger.info(f"Adding default ticker JPM to finance-related article: {title}")
-                                            tickers = ["JPM"]
-                                            break
-                            
-                            if tickers:
-                                logger.info(f"Found tickers {tickers} for article: {title}")
-                                article = NewsArticle(title, summary, url, published_date, tickers)
-                                articles.append(article)
-                        
-                        except Exception as e:
-                            logger.error(f"Error processing news item: {e}")
-                            continue
-                
-                except Exception as e:
-                    logger.error(f"Error processing URL {url}: {e}")
-                    continue
-                
-                # If we found articles on this URL, don't try the others
-                if articles:
+
+    def get_latest_news(self, max_pages=1):
+        """
+        Fetch up to max_pages of news. Return list of NewsArticle sorted newest first.
+        """
+        articles = []
+        page = 1
+        selectors = [
+            'div.card.col-view',
+            'div.col-sm-8.col-lg-9.pull-left.card',
+            '.card-list-item',
+            '.news-release-item',
+            '.release-card',
+            '.news-card',
+        ]
+
+        while page <= max_pages:
+            url = f"{self.BASE_URL}?page={page}&pagesize=100"
+            logger.info(f"Fetching PRNewswire page {page}: {url}")
+            try:
+                resp = requests.get(url, headers=self.headers, timeout=30)
+                resp.raise_for_status()
+            except Exception as e:
+                logger.error(f"Error fetching page {page}: {e}")
+                break
+
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            items = []
+            for sel in selectors:
+                found = soup.select(sel)
+                if found:
+                    items = found
+                    logger.info(f"Using selector '{sel}' with {len(items)} items")
                     break
-            
-            return articles
-            
-        except requests.RequestException as e:
-            logger.error(f"Error fetching news: {e}")
-            return []
-    
+            if not items:
+                logger.warning(f"No news items found on page {page}")
+                break
+
+            for idx, item in enumerate(items, start=1):
+                try:
+                    h3 = item.find('h3')
+                    small = h3.find('small') if h3 else None
+                    raw_date = small.text.strip() if small else ''
+                    if small:
+                        small.extract()
+                    raw_date = raw_date.replace(' ET', '')
+                    parts = [p.strip() for p in raw_date.split(',')]
+                    try:
+                        date_part = f"{parts[0]}, {parts[1]}"
+                        time_part = parts[2]
+                        pub_date = datetime.strptime(date_part, '%b %d, %Y').date()
+                        pub_time = datetime.strptime(time_part, '%H:%M').time()
+                    except (IndexError, ValueError):
+                        logger.warning(f"Couldn't parse date '{raw_date}', defaulting to now")
+                        now = datetime.utcnow()
+                        pub_date = now.date()
+                        pub_time = now.time().replace(second=0, microsecond=0)
+
+                    title = h3.get_text(strip=True) if h3 else 'No title'
+
+                    link = item.select_one('a.newsreleaseconsolidatelink')
+                    if not link or not link.get('href'):
+                        logger.warning(f"Item {idx} missing link, skipping")
+                        continue
+                    article_url = link['href']
+                    if not article_url.startswith('http'):
+                        article_url = f"https://www.prnewswire.com{article_url}"
+
+                    summary = self.get_article_content(article_url)
+                    tickers = self.extract_tickers(f"{title} {summary}")
+                    if not tickers:
+                        logger.info(f"Item {idx} has no valid tickers, skipping")
+                        continue
+
+                    # skip if no float data later in saving logic
+                    art = NewsArticle(title, summary, article_url, pub_date, pub_time, tickers)
+                    logger.info(f"Parsed article: {art}")
+                    articles.append(art)
+
+                except Exception as e:
+                    logger.error(f"Error parsing item {idx}: {e}")
+                    continue
+
+            page += 1
+            tmod.sleep(1)
+
+        articles.sort(key=lambda a: (a.published_date, a.published_time), reverse=True)
+        logger.info(f"Scraped {len(articles)} articles")
+        return articles
+
     def get_article_content(self, url):
-        """Fetch and extract the content of a specific article."""
         try:
-            # Use trafilatura to extract the main content
-            downloaded = trafilatura.fetch_url(url)
-            text = trafilatura.extract(downloaded)
-            
-            if not text:
-                # Fallback to requests + BeautifulSoup if trafilatura fails
-                response = requests.get(url, headers=self.headers, timeout=30)
-                response.raise_for_status()
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Look for the article content
-                article_content = soup.select_one('.release-body')
-                if article_content:
-                    text = article_content.get_text(strip=True)
-                else:
-                    text = "Content not available"
-            
-            return text
-            
+            raw = trafilatura.fetch_url(url)
+            text = trafilatura.extract(raw)
+            if text:
+                return text
+        except Exception:
+            pass
+        try:
+            resp = requests.get(url, headers=self.headers, timeout=30)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            body = soup.select_one('.release-body')
+            return body.get_text(strip=True) if body else ''
         except Exception as e:
             logger.error(f"Error fetching article content: {e}")
-            return "Error fetching content"
-    
+            return ''
+
     def extract_tickers(self, text):
-        """Extract stock ticker symbols from text."""
-        # Common patterns for tickers in financial news
+        """Extract all NASDAQ/NYSE tickers like (NASDAQ:META), (NYSE: T), etc."""
         patterns = [
-            r'NYSE:\s*([A-Z]{1,5})',  # NYSE: AAPL
-            r'NASDAQ:\s*([A-Z]{1,5})',  # NASDAQ: MSFT
-            r'NYSEAMERICAN:\s*([A-Z]{1,5})',  # NYSEAMERICAN: XYZ
-            r'NYSEMKT:\s*([A-Z]{1,5})',  # NYSEMKT: XYZ
-            r'OTC(?:QB|QX|BB|PINK)?:\s*([A-Z]{1,5})',  # OTCQB: ABCD
-            r'\(NYSE:\s*([A-Z]{1,5})\)',  # (NYSE: AAPL)
-            r'\(NASDAQ:\s*([A-Z]{1,5})\)',  # (NASDAQ: MSFT)
-            r'\bSymbol:\s*([A-Z]{1,5})\b',  # Symbol: AAPL
-            r'\bTicker(?:\s+Symbol)?:\s*([A-Z]{1,5})\b',  # Ticker: AAPL or Ticker Symbol: AAPL
-            r'\(([A-Z]{2,4})\)',  # (AAPL) - common pattern in news
-            r'stock\s+([A-Z]{2,4})\b',  # stock AAPL
-            r'shares\s+of\s+([A-Z]{2,4})\b',  # shares of AAPL
+            r'\b(?:NASDAQ|Nasdaq|nasdaq):\s*([A-Z][A-Z0-9\.]{1,10})',
+            r'\b(?:NYSE|Nyse|nyse):\s*([A-Z][A-Z0-9\.]{1,10})'
         ]
-        
+        found = []
+        for pat in patterns:
+            matches = re.findall(pat, text)
+            found.extend(matches)
+
+        # Deduplicate while preserving order
+        seen = set()
         tickers = []
-        for pattern in patterns:
-            matches = re.findall(pattern, text)
-            tickers.extend(matches)
-        
-        # Add common financial stocks for testing if no tickers found
-        if not tickers and "financ" in text.lower():
-            possible_tickers = ["JPM", "BAC", "WFC", "C", "GS", "MS", "BLK"]
-            # Extract words that might be tickers (all caps, 2-5 letters)
-            word_matches = re.findall(r'\b([A-Z]{2,5})\b', text)
-            for word in word_matches:
-                if word in possible_tickers:
-                    tickers.append(word)
-        
-        # Remove duplicates while preserving order
-        unique_tickers = []
-        for ticker in tickers:
-            if ticker not in unique_tickers:
-                unique_tickers.append(ticker)
-        
-        return unique_tickers
+        for t in found:
+            t = t.upper().strip()
+            if t not in seen:
+                tickers.append(t)
+                seen.add(t)
+
+        return tickers
+
+        raw = []
+        # extract comma-lists
+        for grp in list_pat.findall(text):
+            parts = [p.strip() for p in grp.split(',')]
+            raw.extend(parts)
+        # extract simple
+        raw.extend(simple_pat.findall(text))
+
+        unique = []
+        for sym in raw:
+            s = sym.upper()
+            if s in ("NASDAQ", "NYSE"):  # skip plain mentions
+                continue
+            if re.fullmatch(r"[A-Z]{1,5}(?:\.[A-Z])?", s) and s not in unique:
+                unique.append(s)
+        return unique
+
+
+# if __name__ == "__main__":
+#     logging.basicConfig(level=logging.INFO)
+#     scraper = PRNewswireScraper()
+#     articles = scraper.get_latest_news(max_pages=1)
+#
+#     for idx, article in enumerate(articles, start=1):
+#         print(f"\n[{idx}] {article.title}")
+#         print(f"URL: {article.url}")
+#         print(f"Tickers: {article.tickers}")
