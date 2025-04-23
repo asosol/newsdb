@@ -46,8 +46,8 @@ class Article(db.Model):
             'summary': self.summary,
             'url': self.url,
             # isoformat date & HH:MM time
-            'published_date': self.published_date.isoformat() if self.published_date else None,
-            'published_time': self.published_time.strftime('%H:%M') if self.published_time else None,
+            'published_date': self.published_date.strftime('%Y-%m-%d') if self.published_date else '',
+            'published_time': self.published_time.strftime('%H:%M') if self.published_time else '',
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'tickers': [t.symbol for t in self.tickers]
         }

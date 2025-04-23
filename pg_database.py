@@ -69,14 +69,22 @@ class NewsDatabase:
 
             result = []
             for art in records:
-                d = art.to_dict()
+                obj = ArticleObject(
+                    title=art.title,
+                    summary=art.summary,
+                    url=art.url,
+                    published_date=art.published_date,
+                    published_time=art.published_time,
+                    tickers=[t.symbol for t in art.tickers]
+                )
+                obj.id = art.id
                 float_map = {}
-                for sym in d['tickers']:
+                for sym in obj.tickers:
                     fd = FloatData.query.filter_by(ticker_symbol=sym).first()
                     if fd:
                         float_map[sym] = fd.to_dict()
-                d['float_data'] = float_map
-                result.append(d)
+                obj.float_data = float_map
+                result.append(obj)
 
             return result
         except Exception as e:

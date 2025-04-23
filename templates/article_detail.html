@@ -81,11 +81,12 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <span>
                         <i class="bi bi-calendar"></i> Published: 
-                        {{ article.published_date.strftime('%Y-%m-%d') if article.published_date else 'N/A' }}
+                        {{ article.published_date if article.published_date else 'N/A' }}
+
                     </span>
                     <span>
                         <i class="bi bi-clock"></i> Published Time:
-                        {{ article.published_time.strftime('%H:%M') if article.published_time else 'N/A' }}
+                        {{ article.published_time if article.published_time else 'N/A' }}
                     </span>
                 </div>
             </div>
