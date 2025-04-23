@@ -1,5 +1,6 @@
 flask
 requests
+yfinance
 beautifulsoup4
 trafilatura
 zoneinfo; python_version < "3.9"
