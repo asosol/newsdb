@@ -4,5 +4,6 @@ yfinance
 beautifulsoup4
 Flask-SQLAlchemy
 trafilatura
+psycopg2
 zoneinfo; python_version < "3.9"
 
