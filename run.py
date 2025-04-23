@@ -14,8 +14,14 @@ from stock_data import StockDataFetcher
 
 # -- App setup --------------------------------------------------------------
 app = Flask(__name__)
+
+# Ensure DATABASE_URL is provided
+database_uri = os.environ.get('DATABASE_URL')
+if not database_uri:
+    raise RuntimeError("DATABASE_URL environment variable is not set.")
+
 app.config.from_mapping({
-    'SQLALCHEMY_DATABASE_URI': os.environ.get('DATABASE_URL'),
+    'SQLALCHEMY_DATABASE_URI': database_uri,
     'SQLALCHEMY_TRACK_MODIFICATIONS': False
 })
 db.init_app(app)
@@ -30,7 +36,7 @@ STATUS = {
     'last_update': None
 }
 
-# Logging
+# Logging setup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -133,8 +139,5 @@ def api_refresh():
 def api_status():
     return jsonify(STATUS)
 
-# -- Run -------------------------------------------------------------------
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    # Bind to 0.0.0.0 so it’s reachable externally (e.g. on Replit, Docker, etc.)
-    app.run(host='0.0.0.0', port=port, debug=True)
+# -- Export the app for Render (no app.run here!) ----------------------------
+# DO NOT include `app.run()` — Render handles running the app via gunicorn or equivalent
