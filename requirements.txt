@@ -8,5 +8,6 @@ Flask-SQLAlchemy
 trafilatura
 psycopg2-binary
 python-dotenv
+curl-cffi
 zoneinfo; python_version < "3.9"
 
