@@ -15,7 +15,7 @@ import models
 from models import db
 from run import app
 import threading
-
+from run import app
 
 # Set up logging
 logging.basicConfig(
@@ -146,3 +146,6 @@ class DataMonitor:
 # Instantiate the monitor and start it in a thread
 monitor = DataMonitor()
 threading.Thread(target=monitor.run, daemon=True).start()
+
+__app__ = app
+app = app
