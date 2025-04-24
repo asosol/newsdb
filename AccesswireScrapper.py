@@ -86,7 +86,7 @@ class AccesswireScraper:
 
 # if __name__ == "__main__":
 #     scraper = AccesswireScraper()
-#     articles = scraper.get_latest_news(max_pages=10)
+#     articles = scraper.get_latest_news(max_pages=1)
 #
 #     print(f"✅ Scraped {len(articles)} articles from Accesswire\n")
 #     for i, article in enumerate(articles, 1):

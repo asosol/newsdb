@@ -50,7 +50,7 @@ class DataMonitor:
                     with ThreadPoolExecutor(max_workers=2) as executor:
                         futures = [
                             executor.submit(self.pr_scraper.get_latest_news, 1),
-                            executor.submit(self.access_scraper.get_latest_news, 1)
+                            executor.submit(self.access_scraper.get_latest_news, 5)
                         ]
                         for idx, future in enumerate(futures, 1):
                             try:
