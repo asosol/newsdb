@@ -132,11 +132,26 @@ class PRNewswireScraper:
     def get_article_content(self, url):
         try:
             raw = trafilatura.fetch_url(url)
-            text = trafilatura.extract(raw)
+            if not raw:
+                logger.warning(f"[fetch_url] No content from: {url}")
+                return ''
+
+            try:
+                text = trafilatura.extract(raw)
+            except SystemExit:
+                logger.error(f"[trafilatura.extract] SystemExit while extracting {url}")
+                text = ''
+            except Exception as e:
+                logger.exception(f"[trafilatura.extract] Exception on {url}: {e}")
+                text = ''
+
             if text:
                 return text
-        except Exception:
-            pass
+
+        except Exception as e:
+            logger.warning(f"[trafilatura.fetch_url] Failed to fetch {url}: {e}")
+
+        # Fallback to BeautifulSoup
         try:
             resp = requests.get(url, headers=self.headers, timeout=30)
             resp.raise_for_status()
@@ -144,7 +159,7 @@ class PRNewswireScraper:
             body = soup.select_one('.release-body')
             return body.get_text(strip=True) if body else ''
         except Exception as e:
-            logger.error(f"Error fetching article content: {e}")
+            logger.error(f"[BeautifulSoup fallback] Error fetching article content: {e}")
             return ''
 
     def extract_tickers(self, text):
