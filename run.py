@@ -69,15 +69,22 @@ def index():
     def passes_filter(article):
         if not article.tickers or not article.float_data:
             return False
+
         first = article.tickers[0]
         val = article.float_data.get(first, {}).get('float')
-        if val and isinstance(val, str) and val.endswith('M'):
+
+        if not val or not isinstance(val, str):
+            return False
+
+        # Only allow values that are in 'M' (millions), exclude 'B'
+        if val.endswith('M'):
             try:
                 num = float(val[:-1])
                 return (num < filter_val) if filter_op == 'lt' else (num > filter_val)
             except Exception:
                 return False
-        return True
+        else:
+            return False  # exclude 'B', 'K', or any other format
 
     filtered = list(filter(passes_filter, articles)) if filter_val else articles
 
