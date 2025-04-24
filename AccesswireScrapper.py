@@ -28,7 +28,6 @@ class AccesswireScraper:
         for page in range(max_pages):
             url = (
                 f"{self.BASE_URL}?pageindex={page}"
-                f"&articleindustry=Banking%20&%20Financial%20Services"
                 f"&pageSize=20"
             )
 
@@ -87,7 +86,7 @@ class AccesswireScraper:
 
 # if __name__ == "__main__":
 #     scraper = AccesswireScraper()
-#     articles = scraper.get_latest_news(max_pages=5)
+#     articles = scraper.get_latest_news(max_pages=10)
 #
 #     print(f"✅ Scraped {len(articles)} articles from Accesswire\n")
 #     for i, article in enumerate(articles, 1):
