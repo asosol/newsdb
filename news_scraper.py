@@ -6,6 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import time as tmod
 import trafilatura
+import gc
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -86,14 +87,11 @@ class PRNewswireScraper:
                     if not article_url.startswith('http'):
                         article_url = f"https://www.prnewswire.com{article_url}"
 
-                    # Fetch article page and extract timestamp from detail view
                     pub_date, pub_time = self.extract_date_from_article(article_url)
-
-                    # Get headline directly (don't include <small> time)
                     title = h3.get_text(strip=True) if h3 else 'No title'
 
                     summary = self.get_article_content(article_url)
-                    tickers = self.extract_tickers(f"{summary}")
+                    tickers = self.extract_tickers(summary)
                     if not tickers:
                         logger.info(f"Item {idx} has no valid tickers, skipping")
                         continue
@@ -102,9 +100,16 @@ class PRNewswireScraper:
                     logger.info(f"Parsed article: {article}")
                     articles.append(article)
 
+                    # Memory management
+                    del summary, article
+                    gc.collect()
+
                 except Exception as e:
                     logger.error(f"Error parsing item {idx}: {e}")
                     continue
+
+            del soup, items, resp
+            gc.collect()
 
             page += 1
             tmod.sleep(1)
@@ -145,19 +150,23 @@ class PRNewswireScraper:
                 logger.exception(f"[trafilatura.extract] Exception on {url}: {e}")
                 text = ''
 
+            del raw
+            gc.collect()
             if text:
                 return text
 
         except Exception as e:
             logger.warning(f"[trafilatura.fetch_url] Failed to fetch {url}: {e}")
 
-        # Fallback to BeautifulSoup
         try:
             resp = requests.get(url, headers=self.headers, timeout=30)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, 'html.parser')
             body = soup.select_one('.release-body')
-            return body.get_text(strip=True) if body else ''
+            result = body.get_text(strip=True) if body else ''
+            del soup, body, resp
+            gc.collect()
+            return result
         except Exception as e:
             logger.error(f"[BeautifulSoup fallback] Error fetching article content: {e}")
             return ''
