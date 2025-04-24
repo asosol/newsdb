@@ -7,5 +7,6 @@ pyodbc
 Flask-SQLAlchemy
 trafilatura
 psycopg2-binary
+python-dotenv
 zoneinfo; python_version < "3.9"
 

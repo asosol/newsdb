@@ -3,37 +3,33 @@
 Flask web application for the stock news monitor.
 Handles listing, detail view, manual refresh, and status.
 """
+
 import os
 import logging
 from datetime import datetime
-from urllib.parse import quote_plus
 from flask import Flask, render_template, jsonify, redirect, url_for, request
 from models import db
 from pg_database import NewsDatabase
 from news_scraper import PRNewswireScraper
 from stock_data import StockDataFetcher
+from dotenv import load_dotenv
+
 
 # -- App setup --------------------------------------------------------------
 app = Flask(__name__)
 
-# Convert Azure SQL connection string into SQLAlchemy URI
-raw_conn_str = os.environ.get('SQLAZURECONNSTR_DB')
-if not raw_conn_str:
-    raise RuntimeError("Missing SQLAZURECONNSTR_DB environment variable.")
+load_dotenv()  # Load .env vars
 
-# Extract values manually (Azure provides in ADO.NET style, so we hardcode for now)
-server = 'sqlsrv-araso-prod.database.windows.net'
-database = 'sqldb-araso-prod'
-user = 'sqlnewsusr'
-password = 'DCV0zBmL1!'
-driver = 'ODBC+Driver+17+for+SQL+Server'
+# Load PostgreSQL connection details from environment variables
+pg_user = os.environ.get("PG_USER", "postgres")
+pg_password = os.environ.get("PG_PASS", "yourpassword")
+pg_host = os.environ.get("PG_HOST", "localhost")
+pg_port = os.environ.get("PG_PORT", "5432")
+pg_db = os.environ.get("PG_DB", "newsdb")
 
-# URL-encode the password
-password = quote_plus(password)
-
-# Final SQLAlchemy MSSQL URI
+# Assemble SQLAlchemy DB URI for PostgreSQL
 app.config['SQLALCHEMY_DATABASE_URI'] = (
-    f"mssql+pyodbc://{user}:{password}@{server}:1433/{database}?driver={driver}"
+    f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_db}"
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 

@@ -146,6 +146,3 @@ class DataMonitor:
 # Instantiate the monitor and start it in a thread
 monitor = DataMonitor()
 threading.Thread(target=monitor.run, daemon=True).start()
-
-__app__ = app
-app = app
