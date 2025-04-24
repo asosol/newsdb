@@ -1,9 +1,11 @@
 flask
 requests
 yfinance
+gunicorn
 beautifulsoup4
+pyodbc
 Flask-SQLAlchemy
 trafilatura
-psycopg2
+psycopg2-binary
 zoneinfo; python_version < "3.9"
 

@@ -6,6 +6,7 @@ Handles listing, detail view, manual refresh, and status.
 import os
 import logging
 from datetime import datetime
+from urllib.parse import quote_plus
 from flask import Flask, render_template, jsonify, redirect, url_for, request
 from models import db
 from pg_database import NewsDatabase
@@ -15,15 +16,28 @@ from stock_data import StockDataFetcher
 # -- App setup --------------------------------------------------------------
 app = Flask(__name__)
 
-# Ensure DATABASE_URL is provided
-database_uri = os.environ.get('DATABASE_URL')
-if not database_uri:
-    raise RuntimeError("DATABASE_URL environment variable is not set.")
+# Convert Azure SQL connection string into SQLAlchemy URI
+raw_conn_str = os.environ.get('SQLAZURECONNSTR_DB')
+if not raw_conn_str:
+    raise RuntimeError("Missing SQLAZURECONNSTR_DB environment variable.")
 
-app.config.from_mapping({
-    'SQLALCHEMY_DATABASE_URI': database_uri,
-    'SQLALCHEMY_TRACK_MODIFICATIONS': False
-})
+# Extract values manually (Azure provides in ADO.NET style, so we hardcode for now)
+server = 'sqlsrv-araso-prod.database.windows.net'
+database = 'sqldb-araso-prod'
+user = 'sqlnewsusr'
+password = 'DCV0zBmL1!'
+driver = 'ODBC+Driver+17+for+SQL+Server'
+
+# URL-encode the password
+password = quote_plus(password)
+
+# Final SQLAlchemy MSSQL URI
+app.config['SQLALCHEMY_DATABASE_URI'] = (
+    f"mssql+pyodbc://{user}:{password}@{server}:1433/{database}?driver={driver}"
+)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize DB
 db.init_app(app)
 
 news_db = NewsDatabase()
@@ -138,6 +152,3 @@ def api_refresh():
 @app.route('/api/status')
 def api_status():
     return jsonify(STATUS)
-
-# -- Export the app for Render (no app.run here!) ----------------------------
-# DO NOT include `app.run()` — Render handles running the app via gunicorn or equivalent
