@@ -8,37 +8,35 @@ import os
 import logging
 from datetime import datetime
 from flask import Flask, render_template, jsonify, redirect, url_for, request
+from concurrent.futures import ThreadPoolExecutor
+
 from models import db
 from pg_database import NewsDatabase
+from AccesswireScrapper import AccesswireScraper
 from news_scraper import PRNewswireScraper
 from stock_data import StockDataFetcher
 from dotenv import load_dotenv
 
-
 # -- App setup --------------------------------------------------------------
 app = Flask(__name__)
+load_dotenv()
 
-load_dotenv()  # Load .env vars
-
-# Load PostgreSQL connection details from environment variables
+# PostgreSQL DB Config
 pg_user = os.environ.get("PG_USER", "postgres")
 pg_password = os.environ.get("PG_PASS", "yourpassword")
 pg_host = os.environ.get("PG_HOST", "localhost")
 pg_port = os.environ.get("PG_PORT", "5432")
 pg_db = os.environ.get("PG_DB", "newsdb")
 
-# Assemble SQLAlchemy DB URI for PostgreSQL
-app.config['SQLALCHEMY_DATABASE_URI'] = (
-    f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_db}"
-)
+app.config['SQLALCHEMY_DATABASE_URI'] = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_db}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Initialize DB
 db.init_app(app)
 
+# Core instances
 news_db = NewsDatabase()
-scraper = PRNewswireScraper()
 stock_fetcher = StockDataFetcher()
+pr_scraper = PRNewswireScraper()
+access_scraper = AccesswireScraper()
 
 STATUS = {
     'message': 'Ready',
@@ -47,14 +45,10 @@ STATUS = {
 }
 
 # Logging setup
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-# Ensure tables exist
 with app.app_context():
     db.create_all()
 
@@ -69,22 +63,15 @@ def index():
     def passes_filter(article):
         if not article.tickers or not article.float_data:
             return False
-
         first = article.tickers[0]
         val = article.float_data.get(first, {}).get('float')
-
-        if not val or not isinstance(val, str):
-            return False
-
-        # Only allow values that are in 'M' (millions), exclude 'B'
-        if val.endswith('M'):
+        if val and val.endswith('M'):
             try:
                 num = float(val[:-1])
                 return (num < filter_val) if filter_op == 'lt' else (num > filter_val)
             except Exception:
                 return False
-        else:
-            return False  # exclude 'B', 'K', or any other format
+        return False
 
     filtered = list(filter(passes_filter, articles)) if filter_val else articles
 
@@ -94,11 +81,7 @@ def index():
         filter_val=filter_val or '',
         filter_op=filter_op or 'lt',
         page=page,
-        status={
-            'message': 'Ready',
-            'progress': 100,
-            'last_update': None
-        }
+        status={'message': 'Ready', 'progress': 100, 'last_update': STATUS['last_update']}
     )
 
 @app.route('/clear', methods=['POST'])
@@ -118,18 +101,33 @@ def article_detail(article_id):
     return render_template(
         'article_detail.html',
         article=article,
-        status={'message': 'Viewing details', 'progress': 100, 'last_update': None}
+        status={'message': 'Viewing details', 'progress': 100, 'last_update': STATUS['last_update']}
     )
 
 @app.route('/api/refresh', methods=['POST'])
 def api_refresh():
     try:
         STATUS.update(message='Refreshing…', progress=0)
-        raw = scraper.get_latest_news(max_pages=1)
-        total = len(raw)
+        articles = []
+
+        # Run PRNewswire and Accesswire concurrently
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(pr_scraper.get_latest_news, 1),
+                executor.submit(access_scraper.get_latest_news, 1),
+            ]
+            for i, future in enumerate(futures):
+                try:
+                    result = future.result()
+                    articles.extend(result)
+                    logger.info(f"✅ Source {i+1} returned {len(result)} articles")
+                except Exception as e:
+                    logger.error(f"❌ Error fetching from source {i+1}: {e}")
+
+        total = len(articles)
         saved = 0
 
-        for i, art in enumerate(raw, start=1):
+        for i, art in enumerate(articles, start=1):
             STATUS['progress'] = int((i / total) * 100)
             if not art.tickers:
                 continue
