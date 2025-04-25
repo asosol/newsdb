@@ -177,7 +177,7 @@
                         if (progressBar) progressBar.style.width = data.progress + '%';
                         if (lastUpdate && data.last_update) {
                             const dt = new Date(data.last_update);
-                            dt.setMinutes(dt.getMinutes() + gmtOffset);
+                            dt.setTime(dt.getTime() + gmtOffset * 60000);
                             const formatted = dt.toLocaleTimeString('en-US', {
                                 hour12: false,
                                 hour: '2-digit',
