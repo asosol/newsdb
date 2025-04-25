@@ -20,12 +20,6 @@
                     <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
                 </form>
 
-                <!-- Manual Refresh -->
-                <form method="post" action="/api/refresh">
-                    <button type="submit" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-arrow-clockwise"></i> Refresh Now
-                    </button>
-                </form>
 
                 <!-- Clear All Articles -->
                 <form method="post" action="/clear" class="ms-2" onsubmit="return confirm('Are you sure you want to delete all articles? This action is irreversible.')">
@@ -99,24 +93,10 @@
     </div>
 </div>
 
-<!-- Pagination Controls -->
-<div class="d-flex justify-content-center my-4">
-    <nav>
-        <ul class="pagination">
-            {% if page > 1 %}
-            <li class="page-item">
-                <a class="page-link" href="{{ url_for('index', page=page-1, float_val=filter_val, filter_op=filter_op) }}">Previous</a>
-            </li>
-            {% endif %}
-            <li class="page-item disabled">
-                <span class="page-link">Page {{ page }}</span>
-            </li>
-            <li class="page-item">
-                <a class="page-link" href="{{ url_for('index', page=page+1, float_val=filter_val, filter_op=filter_op) }}">Next</a>
-            </li>
-        </ul>
-    </nav>
-</div>
+<!-- Timestamp Footer -->
+<footer class="text-center mt-4 mb-2 text-muted" style="font-size: 14px;">
+    Last updated at: <span id="last-updated">--:--:--</span>
+</footer>
 {% endblock %}
 
 {% block scripts %}
@@ -130,6 +110,46 @@
                 window.location.href = `/article/${id}`;
             });
         });
+
+        let lastUpdate = null;
+
+        function updateTimestamp(ts) {
+            try {
+                const dt = new Date(ts);
+                document.getElementById('last-updated').textContent = dt.toLocaleTimeString('en-US', {
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch (e) {
+                console.error('Invalid timestamp format:', ts);
+            }
+        }
+
+        function pollAndRefresh() {
+            fetch("/api/status")
+                .then(r => r.json())
+                .then(data => {
+                    if (data.last_update && data.last_update !== lastUpdate) {
+                        lastUpdate = data.last_update;
+                        updateTimestamp(data.last_update);
+                        location.reload();
+                    }
+                });
+        }
+
+        // Initial fetch for footer
+        fetch("/api/status")
+            .then(r => r.json())
+            .then(data => {
+                if (data.last_update) {
+                    lastUpdate = data.last_update;
+                    updateTimestamp(data.last_update);
+                }
+            });
+
+        setInterval(pollAndRefresh, 30000); // Every 30s
     });
 </script>
 {% endblock %}
