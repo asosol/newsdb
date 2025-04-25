@@ -175,7 +175,13 @@
                         if (progressBar) progressBar.style.width = data.progress + '%';
                         if (lastUpdate && data.last_update) {
                             const date = new Date(data.last_update);
-                            lastUpdate.textContent = date.toLocaleString();
+                            lastUpdate.textContent = date.toLocaleTimeString('en-US', {
+                                hour12: false,
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                timeZone: 'Asia/Tehran'
+                            });
                         }
                     })
                     .catch(error => console.error('Error fetching status:', error));
