@@ -17,7 +17,8 @@ from pg_database import NewsDatabase
 from news_scraper import PRNewswireScraper, NewsArticle
 from AccesswireScrapper import AccesswireScraper
 from stock_data import StockDataFetcher
-from run import app, STATUS
+from run import app
+from run import scraper_status
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -44,7 +45,7 @@ class DataMonitor:
             while self.running:
                 try:
                     self.status = "Fetching latest articles..."
-                    STATUS.update(message="Fetching latest articles...", progress=5)
+                    scraper_status.update(message="Fetching latest articles...", progress=5)
                     articles = []
 
                     # Run both scrapers concurrently
@@ -61,7 +62,7 @@ class DataMonitor:
                             except Exception as e:
                                 logger.error(f"[Source {idx}] Scraper failed: {e}")
 
-                    STATUS.update(progress=20)
+                    scraper_status.update(progress=20)
 
                     # Filter valid articles with tickers
                     articles = [a for a in articles if a.tickers]
@@ -85,10 +86,10 @@ class DataMonitor:
 
                         self.database.save_article(art)
                         saved_count += 1
-                        STATUS['progress'] = int((saved_count / len(articles)) * 70) + 20
+                        scraper_status.update(progress=int((saved_count / len(articles)) * 70) + 20)
 
                     self.status = f"Saved {saved_count}/{len(articles)} articles. Sleeping 60s."
-                    STATUS.update(
+                    scraper_status.update(
                         message=f"Saved {saved_count}/{len(articles)} articles.",
                         progress=100,
                         last_update=datetime.utcnow().isoformat()
@@ -99,7 +100,7 @@ class DataMonitor:
                 except Exception as e:
                     logger.error(f"[Monitor Error] {e}", exc_info=True)
                     self.status = f"Error: {e}"
-                    STATUS.update(message=f"Error: {e}", progress=0)
+                    scraper_status.update(message=f"Error: {e}", progress=0)
                     time.sleep(60)
 
     def stop(self):
