@@ -97,7 +97,7 @@ class AccesswireScraper:
 #     articles = scraper.get_latest_news(max_pages=10)
 #
 #     print(f"✅ Scraped {len(articles)} articles from Accesswire\n")
-#     for i, article in enumerate(articles, 10):
+#     for i, article in enumerate(articles, 1):
 #         print(f"[{i}] {article.title}")
 #         print(f"    🕒 {article.published_date} {article.published_time}")
 #         print(f"    🔗 {article.url}")

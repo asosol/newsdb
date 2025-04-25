@@ -132,7 +132,7 @@ def api_refresh():
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures = [
                 executor.submit(pr_scraper.get_latest_news, 1),
-                executor.submit(access_scraper.get_latest_news, 5),
+                executor.submit(access_scraper.get_latest_news, 10),
                 executor.submit(global_scraper.get_latest_news, 2),
             ]
             for i, future in enumerate(futures):
