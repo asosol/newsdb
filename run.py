@@ -152,4 +152,9 @@ def api_refresh():
 
 @app.route('/api/status')
 def api_status():
-    return jsonify(STATUS)
+    return jsonify({
+        'last_update': STATUS.get('last_update'),
+        'progress': STATUS.get('progress'),
+        'message': STATUS.get('message'),
+    })
+
