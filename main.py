@@ -11,7 +11,7 @@ import logging
 import threading
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-
+from GlobalnewswireScrapper import GlobalNewswireScraper
 from models import db
 from pg_database import NewsDatabase
 from news_scraper import PRNewswireScraper, NewsArticle
@@ -30,6 +30,7 @@ class DataMonitor:
         self.pr_scraper = PRNewswireScraper()
         self.access_scraper = AccesswireScraper()
         self.stock_fetcher = StockDataFetcher()
+        self.global_scraper = GlobalNewswireScraper()
         self.database = NewsDatabase()
         self.running = True
         self.status = "Initializing"
@@ -49,10 +50,11 @@ class DataMonitor:
                     articles = []
 
                     # Run both scrapers concurrently
-                    with ThreadPoolExecutor(max_workers=2) as executor:
+                    with ThreadPoolExecutor(max_workers=3) as executor:
                         futures = [
                             executor.submit(self.pr_scraper.get_latest_news, 1),
-                            executor.submit(self.access_scraper.get_latest_news, 10)
+                            executor.submit(self.access_scraper.get_latest_news, 5),
+                            executor.submit(self.global_scraper.get_latest_news, 2),
                         ]
                         for idx, future in enumerate(futures, 1):
                             try:

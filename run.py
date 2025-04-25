@@ -34,6 +34,7 @@ scraper_status = ScraperStatus()
 from models import db
 from pg_database import NewsDatabase
 from AccesswireScrapper import AccesswireScraper
+from GlobalnewswireScrapper import GlobalNewswireScraper
 from news_scraper import PRNewswireScraper
 from stock_data import StockDataFetcher
 from dotenv import load_dotenv
@@ -58,6 +59,7 @@ news_db = NewsDatabase()
 stock_fetcher = StockDataFetcher()
 pr_scraper = PRNewswireScraper()
 access_scraper = AccesswireScraper()
+global_scraper = GlobalNewswireScraper()
 
 
 # Logging setup
@@ -126,11 +128,12 @@ def api_refresh():
         scraper_status.update(message='Refreshing…', progress=0)
         articles = []
 
-        # Run PRNewswire and Accesswire concurrently
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        # Run PRNewswire, Accesswire, and GlobalNewswire concurrently
+        with ThreadPoolExecutor(max_workers=3) as executor:
             futures = [
                 executor.submit(pr_scraper.get_latest_news, 1),
-                executor.submit(access_scraper.get_latest_news, 1),
+                executor.submit(access_scraper.get_latest_news, 5),
+                executor.submit(global_scraper.get_latest_news, 2),
             ]
             for i, future in enumerate(futures):
                 try:
