@@ -130,12 +130,19 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    const gmtOffset = 6.5 * 60;  // GMT+6.5 offset in minutes
+
     function updateUI(data) {
         if (data.last_update) {
             const dt = new Date(data.last_update);
-            const options = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Europe/Copenhagen' };
-            const copenhagenTime = new Intl.DateTimeFormat('en-US', options).format(dt);
-            document.getElementById('last-updated').textContent = copenhagenTime;
+            dt.setMinutes(dt.getMinutes() + gmtOffset);
+            const formatted = dt.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('last-updated').textContent = formatted;
         }
 
         if (typeof data.progress === 'number') {
@@ -158,8 +165,14 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(data => {
                 const prevUpdate = document.getElementById('last-updated').textContent;
                 updateUI(data);
-                const options = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Europe/Copenhagen' };
-                const newUpdate = new Intl.DateTimeFormat('en-US', options).format(new Date(data.last_update));
+                const updatedDate = new Date(data.last_update);
+                updatedDate.setMinutes(updatedDate.getMinutes() + gmtOffset);
+                const newUpdate = updatedDate.toLocaleTimeString('en-US', {
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
                 if (newUpdate !== prevUpdate) {
                     location.reload();
                 }

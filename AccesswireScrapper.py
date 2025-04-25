@@ -23,7 +23,7 @@ class AccesswireScraper:
             )
         }
 
-    def get_latest_news(self, max_pages=10):
+    def get_latest_news(self, max_pages=5):
         articles = []
 
         for page in range(max_pages):
@@ -32,19 +32,12 @@ class AccesswireScraper:
                 f"&pageSize=20"
             )
 
-            success = False
-            for attempt in range(3):
-                try:
-                    resp = requests.post(url, headers=self.headers, impersonate="chrome110")
-                    resp.raise_for_status()
-                    data = resp.json()
-                    success = True
-                    break
-                except Exception as e:
-                    logger.warning(f"[Accesswire] Attempt {attempt+1}/3 failed for page {page}: {e}")
-                    time.sleep(1)  # optional short delay between retries
-            if not success:
-                logger.error(f"[Accesswire] Failed to fetch page {page} after 3 attempts.")
+            try:
+                resp = requests.post(url, headers=self.headers, impersonate="chrome110", timeout=3)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as e:
+                logger.error(f"[Accesswire] Failed to fetch page {page}: {e}")
                 continue
 
             items = data.get("data", {}).get("articles", [])
@@ -59,7 +52,16 @@ class AccesswireScraper:
                     summary_html = item.get("body", "")
                     summary = BeautifulSoup(summary_html, "html.parser").get_text(strip=True)
 
-                    dt = datetime.fromisoformat(item["adate"]).astimezone(ZoneInfo("America/New_York"))
+                    raw_date = item.get("adate", "").strip()
+                    if not raw_date:
+                        logger.warning("[Accesswire] No adate field found in article JSON.")
+                        continue
+
+                    try:
+                        dt = datetime.fromisoformat(raw_date)
+                    except Exception as e:
+                        logger.warning(f"[Accesswire] Failed to parse ISO date '{raw_date}': {e}")
+                        continue
 
                     tickers = self.extract_tickers(summary)
                     if not tickers:
@@ -94,7 +96,7 @@ class AccesswireScraper:
 
 # if __name__ == "__main__":
 #     scraper = AccesswireScraper()
-#     articles = scraper.get_latest_news(max_pages=10)
+#     articles = scraper.get_latest_news(max_pages=2)
 #
 #     print(f"✅ Scraped {len(articles)} articles from Accesswire\n")
 #     for i, article in enumerate(articles, 1):

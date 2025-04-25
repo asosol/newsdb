@@ -163,6 +163,8 @@
             }
 
             // Status update functionality
+            const gmtOffset = 6.5 * 60;  // GMT+6.5 offset in minutes
+
             function updateStatus() {
                 fetch('/api/status')
                     .then(response => response.json())
@@ -174,14 +176,16 @@
                         if (statusMessage) statusMessage.textContent = data.message;
                         if (progressBar) progressBar.style.width = data.progress + '%';
                         if (lastUpdate && data.last_update) {
-                            const date = new Date(data.last_update);
-                            lastUpdate.textContent = date.toLocaleTimeString('en-US', {
+                            const dt = new Date(data.last_update);
+                            const gmtOffset = 6.5 * 60;  // minutes
+                            dt.setMinutes(dt.getMinutes() + gmtOffset);
+                            const formatted = dt.toLocaleTimeString('en-US', {
                                 hour12: false,
                                 hour: '2-digit',
                                 minute: '2-digit',
-                                second: '2-digit',
-                                timeZone: 'Europe/Copenhagen'
+                                second: '2-digit'
                             });
+                            lastUpdate.textContent = formatted;
                         }
                     })
                     .catch(error => console.error('Error fetching status:', error));
