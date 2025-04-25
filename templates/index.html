@@ -133,9 +133,9 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateUI(data) {
         if (data.last_update) {
             const dt = new Date(data.last_update);
-            document.getElementById('last-updated').textContent = dt.toLocaleTimeString('en-US', {
-                hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
+            const options = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Europe/Copenhagen' };
+            const copenhagenTime = new Intl.DateTimeFormat('en-US', options).format(dt);
+            document.getElementById('last-updated').textContent = copenhagenTime;
         }
 
         if (typeof data.progress === 'number') {
@@ -158,7 +158,8 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(data => {
                 const prevUpdate = document.getElementById('last-updated').textContent;
                 updateUI(data);
-                const newUpdate = new Date(data.last_update).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const options = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Europe/Copenhagen' };
+                const newUpdate = new Intl.DateTimeFormat('en-US', options).format(new Date(data.last_update));
                 if (newUpdate !== prevUpdate) {
                     location.reload();
                 }
