@@ -2,27 +2,23 @@
 {% block title %}Stock News Monitor - Home{% endblock %}
 
 {% block content %}
+<div class="text-center mb-3">
+    <div class="fw-bold">Stock News Monitor</div>
+    <div id="status-message" class="text-muted">Ready</div>
+    <div id="progress-container" style="height: 4px; width: 100%; background: #eee; margin-top: 4px;">
+        <div id="progress-bar" style="height: 100%; width: 0%; background: #007bff;"></div>
+    </div>
+    <div class="mt-1 text-muted" style="font-size: 13px;">
+        Last updated at: <span id="last-updated">--:--:--</span>
+    </div>
+</div>
+
 <div class="row mb-4">
     <div class="col-12">
         <div class="card">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h4 class="mb-0"><i class="bi bi-newspaper"></i> Financial News with Stock Tickers</h4>
 
-                <h4 class="mb-0 d-flex align-items-center gap-3">
-                    <i class="bi bi-newspaper"></i>
-                    <span id="app-status">Stock News Monitor - <span class="text-success">Ready</span></span>
-                </h4>
-
-                <!-- Timestamp + Progress -->
-                <div class="text-center flex-grow-1">
-                    <small class="text-muted">
-                        Last updated at: <span id="last-updated">--:--:--</span>
-                    </small>
-                    <div id="progress-bar-container" class="mt-1" style="height: 4px; background-color: #e0e0e0; width: 200px; margin: auto; display: none;">
-                        <div id="progress-bar-fill" style="height: 100%; width: 0%; background-color: #007bff; transition: width 30s linear;"></div>
-                    </div>
-                </div>
-
-                <!-- Filter Form -->
                 <form class="d-flex align-items-center gap-2" method="get" action="/">
                     <label class="form-label mb-0 fw-bold">Float Filter:</label>
                     <select class="form-select form-select-sm" name="filter_op" style="width: auto;">
@@ -34,7 +30,6 @@
                     <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
                 </form>
 
-                <!-- Clear All Articles -->
                 <form method="post" action="/clear" class="ms-2" onsubmit="return confirm('Are you sure you want to delete all articles? This action is irreversible.')">
                     <button type="submit" class="btn btn-outline-danger btn-sm">
                         <i class="bi bi-trash"></i> Clear All
@@ -42,7 +37,6 @@
                 </form>
             </div>
 
-            <!-- Table Body -->
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover news-table mb-0">
@@ -70,24 +64,11 @@
                                                 <span class="text-muted">N/A</span>
                                             {% endif %}
                                         </td>
-                                        <td>
-                                            {% set fdata = article.float_data.get(article.tickers[0]) %}
-                                            {{ fdata.float if fdata else 'N/A' }}
-                                        </td>
-                                        <td>
-                                            {{ fdata.price if fdata else 'N/A' }}
-                                        </td>
-                                        <td>
-                                            <a href="{{ url_for('article_detail', article_id=article.id) }}" class="text-decoration-none">
-                                                {{ article.title }}
-                                            </a>
-                                        </td>
-                                        <td>
-                                            <span class="text-muted">{{ article.published_date or 'N/A' }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="text-muted">{{ article.published_time or 'N/A' }}</span>
-                                        </td>
+                                        <td>{{ article.float_data.get(article.tickers[0], {}).get('float', 'N/A') }}</td>
+                                        <td>{{ article.float_data.get(article.tickers[0], {}).get('price', 'N/A') }}</td>
+                                        <td><a href="{{ url_for('article_detail', article_id=article.id) }}" class="text-decoration-none">{{ article.title }}</a></td>
+                                        <td><span class="text-muted">{{ article.published_date or 'N/A' }}</span></td>
+                                        <td><span class="text-muted">{{ article.published_time or 'N/A' }}</span></td>
                                     </tr>
                                 {% endfor %}
                             {% else %}
@@ -120,63 +101,57 @@
             });
         });
 
-        const timestamp = document.getElementById("last-updated");
-        const progressContainer = document.getElementById("progress-bar-container");
-        const progressFill = document.getElementById("progress-bar-fill");
-
         let lastUpdate = null;
+        const progressBar = document.getElementById('progress-bar');
+        const statusMessage = document.getElementById('status-message');
 
         function updateTimestamp(ts) {
             try {
                 const dt = new Date(ts);
-                timestamp.textContent = dt.toLocaleTimeString('en-US', {
-                    hour12: false,
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
+                document.getElementById('last-updated').textContent = dt.toLocaleTimeString('en-US', {
+                    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
                 });
             } catch (e) {
-                console.error("Invalid timestamp format", ts);
+                console.error('Invalid timestamp:', ts);
             }
         }
 
-        function pollAndRefresh() {
-            // Show progress bar and start animation
-            progressContainer.style.display = "block";
-            progressFill.style.width = "0%";
-            setTimeout(() => {
-                progressFill.style.width = "100%";
-            }, 10);
+        function fillProgressBar() {
+            progressBar.style.transition = 'width 30s linear';
+            progressBar.style.width = '100%';
+        }
 
-            fetch("/api/status")
+        function resetProgressBar() {
+            progressBar.style.transition = 'none';
+            progressBar.style.width = '0%';
+        }
+
+        function pollAndRefresh() {
+            resetProgressBar();
+            fetch('/api/status')
                 .then(r => r.json())
                 .then(data => {
                     if (data.last_update && data.last_update !== lastUpdate) {
                         lastUpdate = data.last_update;
+                        updateTimestamp(lastUpdate);
+                        location.reload();  // Full refresh
+                    } else {
                         updateTimestamp(data.last_update);
-                        location.reload();
                     }
+                    statusMessage.textContent = data.message || 'Ready';
+                    fillProgressBar();  // start filling again
                 })
-                .catch(err => console.error("Status fetch failed", err))
-                .finally(() => {
-                    setTimeout(() => {
-                        progressContainer.style.display = "none";
-                        progressFill.style.width = "0%";
-                    }, 30000);
+                .catch(() => {
+                    resetProgressBar();
+                    statusMessage.textContent = 'Status check failed';
                 });
         }
 
-        // Initial timestamp
-        fetch("/api/status")
-            .then(r => r.json())
-            .then(data => {
-                if (data.last_update) {
-                    lastUpdate = data.last_update;
-                    updateTimestamp(data.last_update);
-                }
-            });
+        // Initial status + timestamp
+        pollAndRefresh();
 
-        setInterval(pollAndRefresh, 30000); // Every 30s
+        // Every 30s refresh
+        setInterval(pollAndRefresh, 30000);
     });
 </script>
 {% endblock %}
