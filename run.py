@@ -9,6 +9,27 @@ import logging
 from datetime import datetime
 from flask import Flask, render_template, jsonify, redirect, url_for, request
 from concurrent.futures import ThreadPoolExecutor
+import threading
+
+# Thread-safe scraper status tracker
+class ScraperStatus:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.status = {
+            "message": "Ready",
+            "progress": 0,
+            "last_update": None
+        }
+
+    def update(self, **kwargs):
+        with self.lock:
+            self.status.update(kwargs)
+
+    def get(self):
+        with self.lock:
+            return self.status.copy()
+
+scraper_status = ScraperStatus()
 
 from models import db
 from pg_database import NewsDatabase
@@ -38,11 +59,6 @@ stock_fetcher = StockDataFetcher()
 pr_scraper = PRNewswireScraper()
 access_scraper = AccesswireScraper()
 
-STATUS = {
-    'message': 'Ready',
-    'progress': 0,
-    'last_update': None
-}
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -81,7 +97,7 @@ def index():
         filter_val=filter_val or '',
         filter_op=filter_op or 'lt',
         page=page,
-        status={'message': 'Ready', 'progress': 100, 'last_update': STATUS['last_update']}
+        status=scraper_status.get()
     )
 
 @app.route('/clear', methods=['POST'])
@@ -101,13 +117,13 @@ def article_detail(article_id):
     return render_template(
         'article_detail.html',
         article=article,
-        status={'message': 'Viewing details', 'progress': 100, 'last_update': STATUS['last_update']}
+        status=scraper_status.get()
     )
 
 @app.route('/api/refresh', methods=['POST'])
 def api_refresh():
     try:
-        STATUS.update(message='Refreshing…', progress=0)
+        scraper_status.update(message='Refreshing…', progress=0)
         articles = []
 
         # Run PRNewswire and Accesswire concurrently
@@ -128,7 +144,7 @@ def api_refresh():
         saved = 0
 
         for i, art in enumerate(articles, start=1):
-            STATUS['progress'] = int((i / total) * 100)
+            scraper_status.update(progress=int((i / total) * 100))
             if not art.tickers:
                 continue
             fd = stock_fetcher.get_batch_float_data(art.tickers)
@@ -138,23 +154,19 @@ def api_refresh():
             news_db.save_article(art)
             saved += 1
 
-        STATUS.update(
+        scraper_status.update(
             message=f'Saved {saved}/{total}',
             last_update=datetime.utcnow().isoformat(),
             progress=100
         )
-        return jsonify(status=STATUS['message'], success=True)
+        return jsonify(status=scraper_status.get()['message'], success=True)
 
     except Exception as e:
         logger.exception('Refresh failed')
-        STATUS['message'] = f'Error: {e}'
-        return jsonify(status=STATUS['message'], success=False), 500
+        scraper_status.update(message=f'Error: {e}')
+        return jsonify(status=scraper_status.get()['message'], success=False), 500
 
 @app.route('/api/status')
 def api_status():
-    return jsonify({
-        'last_update': STATUS.get('last_update'),
-        'progress': STATUS.get('progress'),
-        'message': STATUS.get('message'),
-    })
+    return jsonify(scraper_status.get())
 
