@@ -20,7 +20,6 @@
                     <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
                 </form>
 
-
                 <!-- Clear All Articles -->
                 <form method="post" action="/clear" class="ms-2" onsubmit="return confirm('Are you sure you want to delete all articles? This action is irreversible.')">
                     <button type="submit" class="btn btn-outline-danger btn-sm">
@@ -93,10 +92,13 @@
     </div>
 </div>
 
-<!-- Timestamp Footer -->
-<footer class="text-center mt-4 mb-2 text-muted" style="font-size: 14px;">
-    Last updated at: <span id="last-updated">--:--:--</span>
-</footer>
+<!-- Status Panel -->
+<div class="text-center mt-4 mb-2 text-muted" style="font-size: 15px;">
+    <span>Last updated at: <span id="last-updated">--:--:--</span></span>
+    <div id="progress-bar" class="mx-auto mt-1" style="width: 200px; height: 4px; background: #ccc; border-radius: 4px; overflow: hidden; display: none;">
+        <div id="progress-fill" style="width: 0%; height: 100%; background: #0d6efd;"></div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -127,6 +129,28 @@
             }
         }
 
+        function animateProgressBar(duration = 30000) {
+            const fill = document.getElementById('progress-fill');
+            const bar = document.getElementById('progress-bar');
+            fill.style.width = '0%';
+            bar.style.display = 'block';
+            let start = null;
+
+            function animate(ts) {
+                if (!start) start = ts;
+                const progress = ts - start;
+                const percent = Math.min((progress / duration) * 100, 100);
+                fill.style.width = percent + '%';
+                if (percent < 100) {
+                    requestAnimationFrame(animate);
+                } else {
+                    bar.style.display = 'none';
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
         function pollAndRefresh() {
             fetch("/api/status")
                 .then(r => r.json())
@@ -139,7 +163,7 @@
                 });
         }
 
-        // Initial fetch for footer
+        // First load timestamp
         fetch("/api/status")
             .then(r => r.json())
             .then(data => {
@@ -149,7 +173,10 @@
                 }
             });
 
-        setInterval(pollAndRefresh, 30000); // Every 30s
+        setInterval(() => {
+            animateProgressBar(30000);
+            pollAndRefresh();
+        }, 30000);
     });
 </script>
 {% endblock %}
