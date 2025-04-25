@@ -130,12 +130,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    const gmtOffset = 6.5 * 60;  // GMT+6.5 offset in minutes
+    const gmtOffset = 390;  // 6.5 hours in minutes
 
     function updateUI(data) {
         if (data.last_update) {
             const dt = new Date(data.last_update);
-            dt.setMinutes(dt.getMinutes() + gmtOffset);
+            dt.setTime(dt.getTime() + gmtOffset * 60000);
             const formatted = dt.toLocaleTimeString('en-US', {
                 hour12: false,
                 hour: '2-digit',
@@ -166,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const prevUpdate = document.getElementById('last-updated').textContent;
                 updateUI(data);
                 const updatedDate = new Date(data.last_update);
-                updatedDate.setMinutes(updatedDate.getMinutes() + gmtOffset);
+                updatedDate.setTime(updatedDate.getTime() + gmtOffset * 60000);
                 const newUpdate = updatedDate.toLocaleTimeString('en-US', {
                     hour12: false,
                     hour: '2-digit',
