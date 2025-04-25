@@ -4,6 +4,17 @@
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
+
+        <!-- Progress and Timestamp -->
+        <div class="text-center my-3">
+            <div id="progress-bar" class="progress" style="height: 8px; width: 300px; margin: auto; display: none;">
+                <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="text-muted mt-2" style="font-size: 14px;">
+                Status: <span id="status-message">Checking...</span> | Last updated at: <span id="last-updated">--:--:--</span>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h4 class="mb-0"><i class="bi bi-newspaper"></i> Financial News with Stock Tickers</h4>
@@ -84,15 +95,6 @@
             </div>
         </div>
 
-        <!-- Progress and Timestamp -->
-        <div class="text-center mt-4 mb-2">
-            <div id="progress-bar" class="progress" style="height: 8px; width: 300px; margin: auto; display: none;">
-                <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-            <div class="text-muted mt-2" style="font-size: 14px;">
-                Status: <span id="status-message">Checking...</span> | Last updated at: <span id="last-updated">--:--:--</span>
-            </div>
-        </div>
     </div>
 </div>
 
@@ -128,56 +130,44 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    let lastUpdate = null;
-
-    function updateTimestamp(ts) {
-        try {
-            const dt = new Date(ts);
+    function updateUI(data) {
+        if (data.last_update) {
+            const dt = new Date(data.last_update);
             document.getElementById('last-updated').textContent = dt.toLocaleTimeString('en-US', {
-                hour12: false,
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
+                hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
             });
-        } catch (e) {
-            console.error('Invalid timestamp format:', ts);
         }
-    }
 
-    function updateProgressBar(progress) {
-        const bar = document.getElementById('progress-bar');
-        const innerBar = bar.querySelector('.progress-bar');
-        if (progress >= 100) {
-            bar.style.display = "none";
-        } else {
-            bar.style.display = "block";
-            innerBar.style.width = progress + "%";
+        if (typeof data.progress === 'number') {
+            const bar = document.getElementById('progress-bar');
+            const innerBar = bar.querySelector('.progress-bar');
+            if (data.progress < 100) {
+                bar.style.display = "block";
+                innerBar.style.width = `${data.progress}%`;
+            } else {
+                bar.style.display = "none";
+            }
         }
+
+        document.getElementById("status-message").textContent = data.message || "Idle";
     }
 
     function pollAndRefresh() {
         fetch("/api/status")
             .then(r => r.json())
             .then(data => {
-                if (data.last_update && data.last_update !== lastUpdate) {
-                    lastUpdate = data.last_update;
-                    updateTimestamp(data.last_update);
+                const prevUpdate = document.getElementById('last-updated').textContent;
+                updateUI(data);
+                const newUpdate = new Date(data.last_update).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                if (newUpdate !== prevUpdate) {
                     location.reload();
-                } else {
-                    updateProgressBar(data.progress || 0);
-                    document.getElementById("status-message").textContent = data.message || "Idle";
                 }
             });
     }
 
-    fetch("/api/status").then(r => r.json()).then(data => {
-        if (data.last_update) {
-            lastUpdate = data.last_update;
-            updateTimestamp(data.last_update);
-        }
-        updateProgressBar(data.progress || 0);
-        document.getElementById("status-message").textContent = data.message || "Idle";
-    });
+    fetch("/api/status")
+        .then(r => r.json())
+        .then(updateUI);
 
     setInterval(pollAndRefresh, 30000);
 });
