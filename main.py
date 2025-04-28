@@ -70,7 +70,7 @@ class DataMonitor:
                     articles = [a for a in articles if a.tickers]
                     if not articles:
                         logger.info("No articles with tickers found. Sleeping...")
-                        time.sleep(60)
+                        time.sleep(30)
                         continue
 
                     articles.sort(key=lambda a: (a.published_date, a.published_time), reverse=True)
@@ -97,13 +97,13 @@ class DataMonitor:
                         last_update=datetime.utcnow().isoformat()
                     )
                     logger.info(self.status)
-                    time.sleep(60)
+                    time.sleep(30)
 
                 except Exception as e:
                     logger.error(f"[Monitor Error] {e}", exc_info=True)
                     self.status = f"Error: {e}"
                     scraper_status.update(message=f"Error: {e}", progress=0)
-                    time.sleep(60)
+                    time.sleep(30)
 
     def stop(self):
         self.running = False
