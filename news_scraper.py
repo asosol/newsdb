@@ -11,6 +11,7 @@ import gc
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
 class NewsArticle:
     def __init__(self, title, summary, url, published_date, published_time, tickers=None):
         self.title = title
@@ -26,6 +27,7 @@ class NewsArticle:
         date_str = self.published_date.isoformat() if self.published_date else ''
         tickers = ','.join(self.tickers) if self.tickers else 'No tickers'
         return f"{date_str} {time_str} — {self.title} [{tickers}]"
+
 
 class PRNewswireScraper:
     BASE_URL = (
@@ -83,24 +85,40 @@ class PRNewswireScraper:
                     if not link or not link.get('href'):
                         logger.warning(f"Item {idx} missing link, skipping")
                         continue
+
                     article_url = link['href']
                     if not article_url.startswith('http'):
                         article_url = f"https://www.prnewswire.com{article_url}"
 
+                    # parse publication timestamp
                     pub_date, pub_time = self.extract_date_from_article(article_url)
+
                     title = h3.get_text(strip=True) if h3 else 'No title'
 
+                    # fetch the body
                     summary = self.get_article_content(article_url)
-                    tickers = self.extract_tickers(summary)
-                    if not tickers:
-                        logger.info(f"Item {idx} has no valid tickers, skipping")
+                    if not summary:
+                        logger.warning(f"Item {idx} ('{title}') empty content, skipping")
                         continue
 
-                    article = NewsArticle(title, summary, article_url, pub_date, pub_time, tickers)
-                    logger.info(f"Parsed article: {article}")
+                    # extract tickers
+                    tickers = self.extract_tickers(summary)
+                    if not tickers:
+                        logger.info(f"Item {idx} ('{title}') has no valid tickers, skipping")
+                        continue
+
+                    # build and collect
+                    article = NewsArticle(
+                        title=title,
+                        summary=summary,
+                        url=article_url,
+                        published_date=pub_date,
+                        published_time=pub_time,
+                        tickers=tickers
+                    )
                     articles.append(article)
 
-                    # Memory management
+                    # memory cleanup
                     del summary, article
                     gc.collect()
 
@@ -110,10 +128,10 @@ class PRNewswireScraper:
 
             del soup, items, resp
             gc.collect()
-
             page += 1
             tmod.sleep(1)
 
+        # sort newest first
         articles.sort(key=lambda a: (a.published_date, a.published_time), reverse=True)
         logger.info(f"Scraped {len(articles)} articles")
         return articles
@@ -125,68 +143,51 @@ class PRNewswireScraper:
             soup = BeautifulSoup(resp.text, 'html.parser')
             meta_p = soup.select_one('p.mb-no')
             if meta_p:
-                timestamp = meta_p.get_text(strip=True).replace(' ET', '')
-                dt_et = datetime.strptime(timestamp, '%b %d, %Y, %H:%M')
-                dt_et = dt_et.replace(tzinfo=ZoneInfo("America/New_York"))
-                return dt_et.date(), dt_et.time()
+                ts = meta_p.get_text(strip=True).replace(' ET', '')
+                dt = datetime.strptime(ts, '%b %d, %Y, %H:%M')
+                dt = dt.replace(tzinfo=ZoneInfo("America/New_York"))
+                return dt.date(), dt.time()
         except Exception as e:
             logger.warning(f"Failed to extract date from article {url}: {e}")
+
+        # fallback to “now”
         now = datetime.now(ZoneInfo("America/New_York"))
         return now.date(), now.time().replace(second=0, microsecond=0)
 
     def get_article_content(self, url):
+        # first try trafilatura
         try:
             raw = trafilatura.fetch_url(url)
-            if not raw:
-                logger.warning(f"[fetch_url] No content from: {url}")
-                return ''
+            if raw:
+                text = trafilatura.extract(raw) or ''
+                if text:
+                    return text
+        except Exception:
+            pass
 
-            try:
-                text = trafilatura.extract(raw)
-            except SystemExit:
-                logger.error(f"[trafilatura.extract] SystemExit while extracting {url}")
-                text = ''
-            except Exception as e:
-                logger.exception(f"[trafilatura.extract] Exception on {url}: {e}")
-                text = ''
-
-            del raw
-            gc.collect()
-            if text:
-                return text
-
-        except Exception as e:
-            logger.warning(f"[trafilatura.fetch_url] Failed to fetch {url}: {e}")
-
+        # fallback to BS4
         try:
             resp = requests.get(url, headers=self.headers, timeout=30)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, 'html.parser')
             body = soup.select_one('.release-body')
-            result = body.get_text(strip=True) if body else ''
-            del soup, body, resp
-            gc.collect()
-            return result
-        except Exception as e:
-            logger.error(f"[BeautifulSoup fallback] Error fetching article content: {e}")
+            return body.get_text(separator='\n', strip=True) if body else ''
+        except Exception:
             return ''
 
     def extract_tickers(self, text):
         patterns = [
-            r'\b(?:NASDAQ|Nasdaq|nasdaq):\s*([A-Z][A-Z0-9\.]{1,10})',
-            r'\b(?:NYSE|Nyse|nyse):\s*([A-Z][A-Z0-9\.]{1,10})'
+            r'\b(?:NASDAQ|NYSE):\s*([A-Z][A-Z0-9\.]{1,10})',
         ]
         found = []
         for pat in patterns:
-            matches = re.findall(pat, text)
-            found.extend(matches)
-
+            found += re.findall(pat, text)
+        # dedupe + uppercase
         seen = set()
         tickers = []
         for t in found:
             t = t.upper().strip()
             if t not in seen:
-                tickers.append(t)
                 seen.add(t)
-
+                tickers.append(t)
         return tickers

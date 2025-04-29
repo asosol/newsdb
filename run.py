@@ -126,34 +126,44 @@ def article_detail(article_id):
 def api_refresh():
     try:
         scraper_status.update(message='Refreshing…', progress=0)
-        articles = []
 
-        # Run PRNewswire, Accesswire, and GlobalNewswire concurrently
+        # 1) fetch from all sources
+        articles = []
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures = [
                 executor.submit(pr_scraper.get_latest_news, 1),
                 executor.submit(access_scraper.get_latest_news, 5),
                 executor.submit(global_scraper.get_latest_news, 2),
             ]
-            for i, future in enumerate(futures):
+            for i, future in enumerate(futures, start=1):
                 try:
                     result = future.result()
                     articles.extend(result)
-                    logger.info(f"✅ Source {i+1} returned {len(result)} articles")
                 except Exception as e:
-                    logger.error(f"❌ Error fetching from source {i+1}: {e}")
+                    pass
 
         total = len(articles)
         saved = 0
 
-        for i, art in enumerate(articles, start=1):
-            scraper_status.update(progress=int((i / total) * 100))
+        # 2) process + save
+        for idx, art in enumerate(articles, start=1):
+            scraper_status.update(progress=int((idx / total) * 100))
+
+            # **debug prints** to see why it skips
+            print(f"→ [{idx}/{total}] URL: {art.url}")
+            print(f"     tickers:   {art.tickers}")
             if not art.tickers:
+                print("     ✖ skip: no tickers\n")
                 continue
+
             fd = stock_fetcher.get_batch_float_data(art.tickers)
             art.float_data = fd
+            print(f"     float_data: {fd}")
             if not any(item.get('float') != 'N/A' for item in fd.values()):
+                print("     ✖ skip: no valid float data\n")
                 continue
+
+            print("     ✔ saving to DB\n")
             news_db.save_article(art)
             saved += 1
 
@@ -165,7 +175,6 @@ def api_refresh():
         return jsonify(status=scraper_status.get()['message'], success=True)
 
     except Exception as e:
-        logger.exception('Refresh failed')
         scraper_status.update(message=f'Error: {e}')
         return jsonify(status=scraper_status.get()['message'], success=False), 500
 

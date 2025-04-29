@@ -1,90 +1,79 @@
 #!/usr/bin/env python3
 """
-Module for retrieving stock data from Yahoo Finance.
+Module for retrieving stock float, price, and market-cap from Yahoo Finance.
 """
-import logging
-import yfinance as yf
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+import yfinance as yf
 
 
 class StockDataFetcher:
-    """Class for fetching stock data from Yahoo Finance."""
+    """Fetch stock float, price & market-cap via yfinance in parallel."""
 
     def __init__(self, max_workers=5):
-        """Initialize with the maximum number of concurrent workers."""
         self.max_workers = max_workers
 
     def get_float_data(self, ticker):
-        """Get float data for a single ticker symbol, or return None if unavailable."""
-        try:
-            logger.debug(f"Fetching data for ticker: {ticker}")
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    stock = yf.Ticker(ticker)
-                    info = stock.info
-                    # Retrieve floatShares or sharesOutstanding
-                    raw_float = info.get('floatShares') or info.get('sharesOutstanding')
-                    if not raw_float:
-                        logger.warning(f"No float data for {ticker}, skipping")
-                        return None
-                    # Format the float value
-                    if raw_float >= 1_000_000_000:
-                        float_str = f"{raw_float / 1_000_000_000:.2f}B"
-                    elif raw_float >= 1_000_000:
-                        float_str = f"{raw_float / 1_000_000:.2f}M"
-                    else:
-                        float_str = f"{raw_float:,}"
+        """Return a dict with 'symbol', 'name', 'float', 'price', 'market_cap' or None."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                stock = yf.Ticker(ticker)
+                info = stock.info
 
-                    # Market cap
-                    market_cap = info.get('marketCap')
-                    if isinstance(market_cap, (int, float)):
-                        if market_cap >= 1_000_000_000:
-                            mcap_str = f"${market_cap / 1_000_000_000:.2f}B"
-                        elif market_cap >= 1_000_000:
-                            mcap_str = f"${market_cap / 1_000_000:.2f}M"
-                        else:
-                            mcap_str = f"${market_cap:,}"
-                    else:
-                        mcap_str = 'N/A'
+                # raw share count
+                raw = info.get('floatShares') or info.get('sharesOutstanding')
+                if not raw:
+                    return None
 
-                    price = info.get('currentPrice', 'N/A')
+                # convert everything below 1B into millions (M)
+                if raw >= 1_000_000_000:
+                    float_str = f"{raw / 1_000_000_000:.2f}B"
+                else:
+                    float_str = f"{raw / 1_000_000:.2f}M"
 
-                    return {
-                        'symbol': ticker,
-                        'name': info.get('shortName', 'N/A'),
-                        'float': float_str,
-                        'float_raw': raw_float,
-                        'price': price,
-                        'market_cap': mcap_str
-                    }
-                except Exception as e:
-                    logger.warning(f"Attempt {attempt + 1}/{max_retries} failed for {ticker}: {e}")
-                    if attempt < max_retries - 1:
-                        time.sleep(1)
-                    else:
-                        raise
-        except Exception as e:
-            logger.error(f"Error fetching float data for {ticker}: {e}")
-        return None
+                # market cap
+                mc = info.get('marketCap') or 0
+                if mc >= 1_000_000_000:
+                    mcap_str = f"${mc / 1_000_000_000:.2f}B"
+                else:
+                    mcap_str = f"${mc / 1_000_000:.2f}M"
+
+                price = info.get('currentPrice', 'N/A')
+                name  = info.get('shortName', 'N/A')
+
+                return {
+                    'symbol':    ticker,
+                    'name':      name,
+                    'float':     float_str,
+                    'float_raw': raw,
+                    'price':     price,
+                    'market_cap': mcap_str
+                }
+
+            except Exception:
+                # retry once per second
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                return None
 
     def get_batch_float_data(self, tickers):
-        """Get float data for multiple ticker symbols in parallel, omitting failures."""
-        if not tickers:
-            return {}
+        """Fetch multiple tickers in parallel and omit any None results."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         results = {}
+        if not tickers:
+            return results
+
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            future_map = {executor.submit(self.get_float_data, t): t for t in tickers}
-            for fut in as_completed(future_map):
-                t = future_map[fut]
+            futures = {executor.submit(self.get_float_data, t): t for t in tickers}
+            for fut in as_completed(futures):
+                sym = futures[fut]
                 try:
                     data = fut.result()
-                    if data is not None:
-                        results[t] = data
-                except Exception as e:
-                    logger.error(f"Error processing result for {t}: {e}")
+                    if data:
+                        results[sym] = data
+                except:
+                    pass
+
         return results
