@@ -3,15 +3,23 @@
 Module for retrieving stock float, price, and market-cap from Yahoo Finance.
 """
 import time
-import yfinance as yf
 import requests
+import yfinance as yf
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Monkeypatch yfinance requests session
+from yfinance import shared
 
+shared._requests = requests.Session()
+shared._requests.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+})
 
 class StockDataFetcher:
     """Fetch stock float, price & market-cap via yfinance in parallel."""
 
     def __init__(self, max_workers=5):
+
         self.max_workers = max_workers
 
     def get_float_data(self, ticker):
@@ -23,18 +31,15 @@ class StockDataFetcher:
                 stock = yf.Ticker(ticker)
                 info = stock.info
 
-                # raw share count
                 raw = info.get('floatShares') or info.get('sharesOutstanding')
                 if not raw:
                     return None
 
-                # convert everything below 1B into millions (M)
                 if raw >= 1_000_000_000:
                     float_str = f"{raw / 1_000_000_000:.2f}B"
                 else:
                     float_str = f"{raw / 1_000_000:.2f}M"
 
-                # market cap
                 mc = info.get('marketCap') or 0
                 if mc >= 1_000_000_000:
                     mcap_str = f"${mc / 1_000_000_000:.2f}B"
@@ -54,7 +59,6 @@ class StockDataFetcher:
                 }
 
             except Exception:
-                # retry once per second
                 if attempt < max_retries - 1:
                     time.sleep(1)
                     continue
@@ -62,8 +66,6 @@ class StockDataFetcher:
 
     def get_batch_float_data(self, tickers):
         """Fetch multiple tickers in parallel and omit any None results."""
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
         results = {}
         if not tickers:
             return results
@@ -80,5 +82,3 @@ class StockDataFetcher:
                     pass
 
         return results
-
-
