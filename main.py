@@ -63,11 +63,12 @@ class DataMonitor:
                                 logger.info(f"[Source {idx}] Retrieved {len(result)} articles.")
                             except Exception as e:
                                 logger.error(f"[Source {idx}] Scraper failed: {e}")
-
+                    logger.info(f"Total fetched articles: {len(articles)}")
                     scraper_status.update(progress=20)
 
                     # Filter valid articles with tickers
                     articles = [a for a in articles if a.tickers]
+                    logger.info(f"Articles with tickers: {len(articles)}")
                     if not articles:
                         logger.info("No articles with tickers found. Sleeping...")
                         time.sleep(30)
@@ -86,6 +87,7 @@ class DataMonitor:
                             logger.info(f"Skipping '{art.title}' — no float data")
                             continue
 
+                        logger.info(f"Saving article: {art.url} with tickers {art.tickers}")
                         self.database.save_article(art)
                         saved_count += 1
                         scraper_status.update(progress=int((saved_count / len(articles)) * 70) + 20)

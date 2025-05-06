@@ -142,6 +142,12 @@ def api_refresh():
                 except Exception as e:
                     pass
 
+        logger.info(f"Total fetched articles: {len(articles)}")
+        scraper_status.update(progress=20)
+
+        articles = [a for a in articles if a.tickers]
+        logger.info(f"Articles with tickers: {len(articles)}")
+
         total = len(articles)
         saved = 0
 
@@ -163,6 +169,7 @@ def api_refresh():
                 print("     ✖ skip: no valid float data\n")
                 continue
 
+            logger.info(f"Saving article: {art.url} with tickers {art.tickers}")
             print("     ✔ saving to DB\n")
             news_db.save_article(art)
             saved += 1
@@ -181,4 +188,3 @@ def api_refresh():
 @app.route('/api/status')
 def api_status():
     return jsonify(scraper_status.get())
-
