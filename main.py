@@ -54,7 +54,7 @@ class DataMonitor:
                         futures = [
                             executor.submit(self.pr_scraper.get_latest_news, 1),
                             executor.submit(self.access_scraper.get_latest_news, 5),
-                            executor.submit(self.global_scraper.get_latest_news, 2),
+                            executor.submit(self.global_scraper.get_latest_news, 1),
                         ]
                         for idx, future in enumerate(futures, 1):
                             try:
@@ -87,7 +87,7 @@ class DataMonitor:
 
                         if not art.float_data or not any(art.float_data.values()):
                             logger.warning(f"Saving without float data: {art.title}")
-                            continue
+
 
                         logger.info(f"Saving article: {art.url} with tickers {art.tickers}")
                         self.database.save_article(art)

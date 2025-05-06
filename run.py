@@ -133,7 +133,7 @@ def api_refresh():
             futures = [
                 executor.submit(pr_scraper.get_latest_news, 1),
                 executor.submit(access_scraper.get_latest_news, 5),
-                executor.submit(global_scraper.get_latest_news, 2),
+                executor.submit(global_scraper.get_latest_news, 1),
             ]
             for i, future in enumerate(futures, start=1):
                 try:
