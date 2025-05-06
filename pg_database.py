@@ -20,7 +20,7 @@ class NewsDatabase:
         try:
             existing = Article.query.filter_by(url=article.url).first()
             if existing:
-                logger.debug(f"Article already exists: {article.url}")
+                logger.info(f"Article already exists: {article.url}")
                 return existing.id
 
             new_article = Article(
@@ -31,6 +31,7 @@ class NewsDatabase:
                 published_time=article.published_time
             )
 
+            # Add tickers
             for sym in article.tickers:
                 ticker = Ticker.query.filter_by(symbol=sym).first()
                 if not ticker:
@@ -40,17 +41,23 @@ class NewsDatabase:
                 new_article.tickers.append(ticker)
 
             db.session.add(new_article)
-            db.session.commit()
-            logger.info(f"Saved Article ID {new_article.id}")
+            db.session.flush()  # Flush before committing
+            logger.info(f"✅ Article staged: {new_article.url}")
 
-            for sym, data in article.float_data.items():
-                self.update_float_data(sym, data)
+            # Save float data if available
+            if article.float_data:
+                for sym, data in article.float_data.items():
+                    if data:  # Only if data is non-empty
+                        self.update_float_data(sym, data)
+
+            db.session.commit()
+            logger.info(f"✅ Article saved with ID {new_article.id}")
 
             return new_article.id
 
         except Exception as e:
+            logger.error(f"❌ Error saving article '{article.url}': {e}", exc_info=True)
             db.session.rollback()
-            logger.error(f"Error saving article: {e}")
             return None
 
     def get_recent_articles(self, page=1, page_size=100):
