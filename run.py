@@ -155,22 +155,21 @@ def api_refresh():
         for idx, art in enumerate(articles, start=1):
             scraper_status.update(progress=int((idx / total) * 100))
 
-            # **debug prints** to see why it skips
-            print(f"→ [{idx}/{total}] URL: {art.url}")
-            print(f"     tickers:   {art.tickers}")
+            logger.info(f"[Refresh] Processing [{idx}/{total}] URL: {art.url}")
+            logger.info(f"[Refresh] Tickers: {art.tickers}")
             if not art.tickers:
-                print("     ✖ skip: no tickers\n")
+                logger.info("Skipping article — no tickers")
                 continue
 
             fd = stock_fetcher.get_batch_float_data(art.tickers)
             art.float_data = fd
-            print(f"     float_data: {fd}")
+            logger.info(f"[Refresh] Float data: {fd}")
             if not any(item.get('float') != 'N/A' for item in fd.values()):
-                print("     ✖ skip: no valid float data\n")
+                logger.info("Skipping article — no valid float data")
                 continue
 
             logger.info(f"Saving article: {art.url} with tickers {art.tickers}")
-            print("     ✔ saving to DB\n")
+            logger.info("Saved to DB")
             news_db.save_article(art)
             saved += 1
 
