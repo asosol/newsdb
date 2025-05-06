@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """
-Module for retrieving stock float, price, and market-cap from Yahoo Finance.
+Module for retrieving stock float, price, and market-cap from Yahoo Finance using curl_cffi.
 """
 import time
-import yfinance as yf
-import requests
-
-
+from curl_cffi import requests as curl_requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class StockDataFetcher:
-    """Fetch stock float, price & market-cap via yfinance in parallel."""
+    """Fetch stock float, price & market-cap via Yahoo Finance APIs with curl_cffi."""
 
     def __init__(self, max_workers=5):
         self.max_workers = max_workers
@@ -17,56 +15,56 @@ class StockDataFetcher:
     def get_float_data(self, ticker):
         """Return a dict with 'symbol', 'name', 'float', 'price', 'market_cap' or None."""
         max_retries = 3
-        session = requests.Session()
-        session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-        })
+        url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=summaryDetail,price,defaultKeyStatistics"
+
         for attempt in range(max_retries):
             try:
-                stock = yf.Ticker(ticker)
-                info = stock.info
+                resp = curl_requests.get(url, impersonate="chrome110", timeout=10)
+                data = resp.json()
 
-                # raw share count
-                raw = info.get('floatShares') or info.get('sharesOutstanding')
+                quoteSummary = data.get("quoteSummary", {}).get("result", [{}])[0]
+                price_info = quoteSummary.get("price", {})
+                summary_info = quoteSummary.get("summaryDetail", {})
+                stats_info = quoteSummary.get("defaultKeyStatistics", {})
+
+                # Get floatShares
+                raw = stats_info.get('floatShares', {}).get('raw') or summary_info.get('sharesOutstanding', {}).get('raw')
                 if not raw:
                     return None
 
-                # convert everything below 1B into millions (M)
                 if raw >= 1_000_000_000:
                     float_str = f"{raw / 1_000_000_000:.2f}B"
                 else:
                     float_str = f"{raw / 1_000_000:.2f}M"
 
-                # market cap
-                mc = info.get('marketCap') or 0
+                # Market cap
+                mc = price_info.get('marketCap', {}).get('raw') or 0
                 if mc >= 1_000_000_000:
                     mcap_str = f"${mc / 1_000_000_000:.2f}B"
                 else:
                     mcap_str = f"${mc / 1_000_000:.2f}M"
 
-                price = info.get('currentPrice', 'N/A')
-                name  = info.get('shortName', 'N/A')
+                price = price_info.get('regularMarketPrice', {}).get('raw', 'N/A')
+                name = price_info.get('shortName', 'N/A')
 
                 return {
-                    'symbol':    ticker,
-                    'name':      name,
-                    'float':     float_str,
+                    'symbol': ticker,
+                    'name': name,
+                    'float': float_str,
                     'float_raw': raw,
-                    'price':     price,
+                    'price': price,
                     'market_cap': mcap_str
                 }
 
-            except Exception:
-                # retry once per second
+            except Exception as e:
+                print(f"Retrying {ticker} due to {e}")
                 if attempt < max_retries - 1:
-                    time.sleep(1)
+                    time.sleep(2 ** attempt)
                     continue
                 return None
 
     def get_batch_float_data(self, tickers):
         """Fetch multiple tickers in parallel and omit any None results."""
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
         results = {}
         if not tickers:
             return results
@@ -83,5 +81,3 @@ class StockDataFetcher:
                     pass
 
         return results
-
-
