@@ -4,6 +4,8 @@ Module for retrieving stock float, price, and market-cap from Yahoo Finance.
 """
 import time
 import yfinance as yf
+import requests
+
 
 
 class StockDataFetcher:
@@ -15,6 +17,10 @@ class StockDataFetcher:
     def get_float_data(self, ticker):
         """Return a dict with 'symbol', 'name', 'float', 'price', 'market_cap' or None."""
         max_retries = 3
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+        })
         for attempt in range(max_retries):
             try:
                 stock = yf.Ticker(ticker)

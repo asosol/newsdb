@@ -162,6 +162,9 @@ def api_refresh():
                 continue
 
             fd = stock_fetcher.get_batch_float_data(art.tickers)
+            logger.info(f"[FloatData DEBUG] Article URL: {art.url}")
+            logger.info(f"[FloatData DEBUG] Retrieved float data: {fd}")
+
             art.float_data = fd
             logger.info(f"[Refresh] Float data: {fd}")
             if not any(item.get('float') != 'N/A' for item in fd.values()):
