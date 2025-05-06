@@ -44,13 +44,13 @@ app = Flask(__name__)
 load_dotenv()
 
 # PostgreSQL DB Config
-pg_user = os.environ.get("PG_USER", "postgres")
-pg_password = os.environ.get("PG_PASS", "yourpassword")
-pg_host = os.environ.get("PG_HOST", "localhost")
-pg_port = os.environ.get("PG_PORT", "5432")
-pg_db = os.environ.get("PG_DB", "newsdb")
+PG_USER     = os.getenv("PG_USER")
+PG_PASSWORD = os.getenv("PG_PASS")
+PG_HOST     = os.getenv("PG_HOST")
+PG_PORT     = os.getenv("PG_PORT")
+PG_DB       = os.getenv("PG_DB")
 
-app.config['SQLALCHEMY_DATABASE_URI'] = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_db}"
+app.config['SQLALCHEMY_DATABASE_URI'] = f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DB}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 

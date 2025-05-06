@@ -77,3 +77,5 @@ class StockDataFetcher:
                     pass
 
         return results
+
+
