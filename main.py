@@ -83,6 +83,8 @@ class DataMonitor:
                     saved_count = 0
                     for art in articles:
                         art.float_data = {t: float_data.get(t, {}) for t in art.tickers}
+                        logger.info(f"Checking article {art.title} — float_data: {art.float_data}")
+
                         if not any(art.float_data.values()):
                             logger.info(f"Skipping '{art.title}' — no float data")
                             continue
