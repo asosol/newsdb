@@ -16,6 +16,16 @@ class NewsDatabase:
     def __init__(self):
         logger.info("NewsDatabase initialized")
 
+    def get_articles_by_ticker(self, ticker, limit=1):
+        articles = (
+            Article.query.join(Article.tickers)
+            .filter(Ticker.symbol == ticker)
+            .order_by(Article.published_date.desc(), Article.published_time.desc())
+            .limit(limit)
+            .all()
+        )
+        return articles
+
     def save_article(self, article: NewsArticle):
         try:
             existing = Article.query.filter_by(url=article.url).first()
@@ -161,15 +171,7 @@ class NewsDatabase:
             db.session.rollback()
             logger.error(f"Failed to clear articles: {e}")
 
-def get_articles_by_ticker(self, ticker, limit=1):
-    session = self.Session()
-    try:
-        results = session.query(ArticleObject).filter(
-            ArticleObject.tickers.contains([ticker])
-        ).order_by(ArticleObject.id.desc()).limit(limit).all()
-        return results
-    finally:
-        session.close()
+
 
 class ArticleObject:
     def __init__(self, title, summary, url, published_date, published_time, tickers=None):
