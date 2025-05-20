@@ -161,6 +161,15 @@ class NewsDatabase:
             db.session.rollback()
             logger.error(f"Failed to clear articles: {e}")
 
+def get_articles_by_ticker(self, ticker, limit=1):
+    session = self.Session()
+    try:
+        results = session.query(ArticleObject).filter(
+            ArticleObject.tickers.contains([ticker])
+        ).order_by(ArticleObject.id.desc()).limit(limit).all()
+        return results
+    finally:
+        session.close()
 
 class ArticleObject:
     def __init__(self, title, summary, url, published_date, published_time, tickers=None):

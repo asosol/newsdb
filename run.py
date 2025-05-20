@@ -186,7 +186,23 @@ def api_refresh():
     except Exception as e:
         scraper_status.update(message=f'Error: {e}')
         return jsonify(status=scraper_status.get()['message'], success=False), 500
+@app.route("/api/check_ticker")
+def check_ticker():
+    from pg_database import NewsDatabase
+    ticker = request.args.get("ticker", "").upper()
+    if not ticker:
+        return jsonify({}), 400
 
+    db = NewsDatabase()
+    articles = db.get_articles_by_ticker(ticker, limit=1)
+    if not articles:
+        return jsonify({})
+    latest = articles[0]
+    return jsonify({
+        "id": latest.id,
+        "title": latest.title,
+        "published": f"{latest.published_date} {latest.published_time}"
+    })
 @app.route('/api/status')
 def api_status():
     return jsonify(scraper_status.get())

@@ -3,6 +3,44 @@
 
 {% block content %}
 <div class="row mb-4">
+
+    <!-- Hover Side Panel for Ticker Monitoring -->
+    <div id="hover-panel">
+        <input type="text" id="ticker-input" placeholder="Enter Ticker (e.g., AAPL)">
+        <button onclick="startTickerAlert()">Monitor</button>
+    </div>
+    <!-- Notification Sound -->
+    <audio id="notif-sound" src="{{ url_for('static', filename='bell.mp3') }}" preload="auto"></audio>
+
+    <style>
+    #hover-panel {
+        position: fixed;
+        top: 120px;
+        right: -200px;
+        width: 200px;
+        padding: 12px 10px;
+        background: #f8f9fa;
+        border: 1px solid #ccc;
+        box-shadow: 0 0 10px #bbb;
+        transition: right 0.3s;
+        z-index: 1100;
+        border-radius: 6px 0 0 6px;
+    }
+    #hover-panel:hover {
+        right: 0;
+    }
+    #hover-panel input {
+        width: 100%;
+        margin-bottom: 8px;
+        padding: 5px;
+        font-size: 15px;
+    }
+    #hover-panel button {
+        width: 100%;
+        padding: 5px 0;
+    }
+    </style>
+
     <div class="col-12">
 
         <!-- Progress and Timestamp -->
@@ -185,5 +223,39 @@ document.addEventListener('DOMContentLoaded', function () {
 
     setInterval(pollAndRefresh, 5000);
 });
+</script>
+<script>
+let lastArticleId = null;
+let activeTicker = null;
+let tickerInterval = null;
+
+function startTickerAlert() {
+    const ticker = document.getElementById("ticker-input").value.trim().toUpperCase();
+    if (!ticker) {
+        alert("Please enter a ticker symbol.");
+        return;
+    }
+    activeTicker = ticker;
+    lastArticleId = null; // Reset on new ticker
+    if (tickerInterval) clearInterval(tickerInterval);
+
+    checkTickerNews(); // Immediate check
+    tickerInterval = setInterval(checkTickerNews, 5000); // Poll every 5 seconds
+}
+
+function checkTickerNews() {
+    if (!activeTicker) return;
+    fetch(`/api/check_ticker?ticker=${activeTicker}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.id && data.id !== lastArticleId) {
+                lastArticleId = data.id;
+                document.getElementById('notif-sound').play();
+                // Optional: show a toast or notification on the page
+                // alert(`🔔 News for ${activeTicker}: ${data.title}`);
+            }
+        })
+        .catch(err => console.error("Ticker check failed:", err));
+}
 </script>
 {% endblock %}
