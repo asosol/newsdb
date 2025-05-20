@@ -4,39 +4,62 @@
 {% block content %}
 <div class="row mb-4">
 
-    <!-- Hover Side Panel for Ticker Monitoring -->
-    <div id="hover-panel">
-        <input type="text" id="ticker-input" placeholder="Enter Ticker (e.g., AAPL)">
-        <button onclick="startTickerAlert()">Monitor</button>
+    <!-- Button to open the side panel -->
+    <button id="open-panel-btn" class="btn btn-primary" style="position: fixed; top: 130px; right: 10px; z-index: 1200;">
+        <i class="bi bi-bell"></i> Alerts
+    </button>
+
+    <!-- Side panel -->
+    <div id="side-panel">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>News Alerts</strong>
+            <button id="close-panel-btn" class="btn btn-sm btn-outline-secondary">&times;</button>
+        </div>
+        <form id="add-ticker-form" class="mb-2 d-flex">
+            <input type="text" id="new-ticker-input" class="form-control me-2" placeholder="Add ticker (e.g. AAPL)" autocomplete="off">
+            <button class="btn btn-success" type="submit">Add</button>
+        </form>
+        <ul id="ticker-list" class="list-group">
+            <!-- Active tickers will appear here -->
+        </ul>
     </div>
-    <!-- Notification Sound -->
     <audio id="notif-sound" src="{{ url_for('static', filename='bell.wav') }}" preload="auto"></audio>
     <style>
-    #hover-panel {
+    #side-panel {
         position: fixed;
-        top: 120px;
-        right: -200px;
-        width: 200px;
-        padding: 12px 10px;
-        background: #f8f9fa;
-        border: 1px solid #ccc;
-        box-shadow: 0 0 10px #bbb;
+        top: 100px;
+        right: -250px;
+        width: 250px;
+        height: 340px;
+        background: #fff;
+        border: 1px solid #bbb;
+        box-shadow: 0 0 15px #bbb;
         transition: right 0.3s;
-        z-index: 1100;
-        border-radius: 6px 0 0 6px;
+        z-index: 1150;
+        padding: 16px 14px 12px 14px;
+        border-radius: 8px 0 0 8px;
+        overflow-y: auto;
     }
-    #hover-panel:hover {
+    #side-panel.open {
         right: 0;
     }
-    #hover-panel input {
-        width: 100%;
-        margin-bottom: 8px;
-        padding: 5px;
-        font-size: 15px;
+    #side-panel #add-ticker-form input {
+        width: 80%;
     }
-    #hover-panel button {
-        width: 100%;
-        padding: 5px 0;
+    #ticker-list {
+        margin-top: 5px;
+    }
+    #ticker-list li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: #f7f7f7;
+    }
+    #ticker-list button {
+        padding: 0 8px;
     }
     </style>
 
@@ -224,37 +247,75 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <script>
-let lastArticleId = null;
-let activeTicker = null;
-let tickerInterval = null;
+const openBtn = document.getElementById('open-panel-btn');
+const sidePanel = document.getElementById('side-panel');
+const closeBtn = document.getElementById('close-panel-btn');
+const form = document.getElementById('add-ticker-form');
+const input = document.getElementById('new-ticker-input');
+const tickerList = document.getElementById('ticker-list');
+const notifSound = document.getElementById('notif-sound');
 
-function startTickerAlert() {
-    const ticker = document.getElementById("ticker-input").value.trim().toUpperCase();
-    if (!ticker) {
-        alert("Please enter a ticker symbol.");
-        return;
+let tickers = {};  // { TICKER: lastArticleId }
+let poller = null;
+
+function openPanel() {
+    sidePanel.classList.add('open');
+}
+function closePanel() {
+    sidePanel.classList.remove('open');
+}
+
+openBtn.addEventListener('click', openPanel);
+closeBtn.addEventListener('click', closePanel);
+
+form.addEventListener('submit', e => {
+    e.preventDefault();
+    const ticker = input.value.trim().toUpperCase();
+    if (!ticker || tickers[ticker]) return;
+    tickers[ticker] = null;
+    addTickerToUI(ticker);
+    input.value = '';
+    if (!poller) startPolling();
+});
+
+function addTickerToUI(ticker) {
+    const li = document.createElement('li');
+    li.className = "list-group-item d-flex justify-content-between align-items-center";
+    li.setAttribute('data-ticker', ticker);
+    li.innerHTML = `
+        <span>${ticker}</span>
+        <button class="btn btn-sm btn-danger ms-2">&times;</button>
+    `;
+    li.querySelector('button').onclick = () => removeTicker(ticker, li);
+    tickerList.appendChild(li);
+}
+
+function removeTicker(ticker, liElem) {
+    delete tickers[ticker];
+    tickerList.removeChild(liElem);
+    if (Object.keys(tickers).length === 0 && poller) {
+        clearInterval(poller);
+        poller = null;
     }
-    activeTicker = ticker;
-    lastArticleId = null; // Reset on new ticker
-    if (tickerInterval) clearInterval(tickerInterval);
-
-    checkTickerNews(); // Immediate check
-    tickerInterval = setInterval(checkTickerNews, 5000); // Poll every 5 seconds
 }
 
-function checkTickerNews() {
-    if (!activeTicker) return;
-    fetch(`/api/check_ticker?ticker=${activeTicker}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data && data.id && data.id !== lastArticleId) {
-                lastArticleId = data.id;
-                document.getElementById('notif-sound').play();
-                // Optional: show a toast or notification on the page
-                // alert(`🔔 News for ${activeTicker}: ${data.title}`);
+function startPolling() {
+    poller = setInterval(async () => {
+        for (let ticker of Object.keys(tickers)) {
+            try {
+                const res = await fetch(`/api/check_ticker?ticker=${ticker}`);
+                const data = await res.json();
+                if (data && data.id && data.id !== tickers[ticker]) {
+                    tickers[ticker] = data.id;
+                    notifSound.play();
+                    // Optionally show a notification/toast here.
+                }
+            } catch (err) {
+                console.error("Ticker check failed:", err);
             }
-        })
-        .catch(err => console.error("Ticker check failed:", err));
+        }
+    }, 5000);
 }
+
 </script>
 {% endblock %}
