@@ -324,6 +324,21 @@ function startPolling() {
 window.addEventListener('DOMContentLoaded', () => {
     Object.keys(tickers).forEach(addTickerToUI);
     if (Object.keys(tickers).length > 0) startPolling();
+
+    // Restore side panel open state if saved
+    if (localStorage.getItem('sidePanelOpen') === 'true') {
+        sidePanel.classList.add('open');
+    }
+});
+
+openBtn.addEventListener('click', () => {
+    sidePanel.classList.add('open');
+    localStorage.setItem('sidePanelOpen', 'true');
+});
+closeBtn.addEventListener('click', () => {
+    sidePanel.classList.remove('open');
+    localStorage.setItem('sidePanelOpen', 'false');
+});
 });
 </script>
 {% endblock %}
