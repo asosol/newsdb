@@ -4,12 +4,11 @@
 {% block content %}
 <div class="row mb-4">
 
-    <!-- Button to open the side panel -->
+        <!-- Button to open the side panel -->
     <button id="open-panel-btn" class="btn btn-primary"
-        style="position: fixed; top: 20px; right: 20px; z-index: 1200;">
+        style="position: fixed; top: 60px; right: 20px; z-index: 1200;">
         <i class="bi bi-bell"></i> Alerts
     </button>
-
     <!-- Side panel -->
     <div id="side-panel">
         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -44,9 +43,6 @@
     #side-panel.open {
         right: 0;
     }
-    #side-panel #add-ticker-form input {
-        width: 80%;
-    }
     #ticker-list {
         margin-top: 5px;
     }
@@ -54,13 +50,20 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 4px;
-        padding: 4px 8px;
+        margin-bottom: 6px;
+        padding: 6px 10px;
         border-radius: 4px;
-        background: #f7f7f7;
+        background: #e9ecef; /* More contrast */
+        color: #212529;
+        font-weight: 600;
+        border: 1px solid #ced4da;
     }
     #ticker-list button {
-        padding: 0 8px;
+        padding: 0 10px;
+        color: #fff;
+        background: #dc3545;
+        border: none;
+        border-radius: 2px;
     }
     </style>
 
@@ -247,6 +250,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setInterval(pollAndRefresh, 5000);
 });
 </script>
+
 <script>
 const openBtn = document.getElementById('open-panel-btn');
 const sidePanel = document.getElementById('side-panel');
@@ -256,15 +260,11 @@ const input = document.getElementById('new-ticker-input');
 const tickerList = document.getElementById('ticker-list');
 const notifSound = document.getElementById('notif-sound');
 
-let tickers = {};  // { TICKER: lastArticleId }
+let tickers = JSON.parse(localStorage.getItem('tickers') || '{}');  // Now persistent!
 let poller = null;
 
-function openPanel() {
-    sidePanel.classList.add('open');
-}
-function closePanel() {
-    sidePanel.classList.remove('open');
-}
+function openPanel() { sidePanel.classList.add('open'); }
+function closePanel() { sidePanel.classList.remove('open'); }
 
 openBtn.addEventListener('click', openPanel);
 closeBtn.addEventListener('click', closePanel);
@@ -276,6 +276,7 @@ form.addEventListener('submit', e => {
     tickers[ticker] = null;
     addTickerToUI(ticker);
     input.value = '';
+    localStorage.setItem('tickers', JSON.stringify(tickers));
     if (!poller) startPolling();
 });
 
@@ -294,6 +295,7 @@ function addTickerToUI(ticker) {
 function removeTicker(ticker, liElem) {
     delete tickers[ticker];
     tickerList.removeChild(liElem);
+    localStorage.setItem('tickers', JSON.stringify(tickers));
     if (Object.keys(tickers).length === 0 && poller) {
         clearInterval(poller);
         poller = null;
@@ -308,8 +310,8 @@ function startPolling() {
                 const data = await res.json();
                 if (data && data.id && data.id !== tickers[ticker]) {
                     tickers[ticker] = data.id;
+                    localStorage.setItem('tickers', JSON.stringify(tickers));
                     notifSound.play();
-                    // Optionally show a notification/toast here.
                 }
             } catch (err) {
                 console.error("Ticker check failed:", err);
@@ -318,5 +320,10 @@ function startPolling() {
     }, 5000);
 }
 
+// On page load, restore tickers and UI
+window.addEventListener('DOMContentLoaded', () => {
+    Object.keys(tickers).forEach(addTickerToUI);
+    if (Object.keys(tickers).length > 0) startPolling();
+});
 </script>
 {% endblock %}
