@@ -366,31 +366,26 @@ function startPolling() {
 }
 
 function showContinuousAlert(ticker, articleTitle) {
-    // Show dialog first, then beep
-    setTimeout(() => {
-        if (confirm(`🔔 New article for ${ticker}:\n\n${articleTitle}\n\nPress OK to hear the alert.`)) {
-            // Now user interacted: Play the beep and start continuous beeping
-            playBeep();
-            beepInterval = setInterval(playBeep, 1000);
+    // Try to play beep immediately (should work if user has interacted with page)
+    playBeep();
+    beepInterval = setInterval(playBeep, 1000);
 
-            // Now, show a custom prompt or button to let user silence
-            setTimeout(() => {
-                if (confirm('Press OK to silence the alert.')) {
-                    clearInterval(beepInterval);
-                    beepInterval = null;
-                    alerting = false;
-                }
-            }, 200);
-        } else {
+    // Show dialog (beeping will continue until OK is clicked)
+    setTimeout(() => {
+        if (confirm(`🔔 New article for ${ticker}:\n\n${articleTitle}\n\nPress OK to silence the alert.`)) {
+            clearInterval(beepInterval);
+            beepInterval = null;
             alerting = false;
         }
     }, 200);
 }
 
 function playBeep() {
-    notifSound.pause();
-    notifSound.currentTime = 0;
-    notifSound.play().catch(() => {});
+    try {
+        notifSound.pause();
+        notifSound.currentTime = 0;
+        notifSound.play().catch(() => {}); // Ignore play errors
+    } catch (e) {}
 }
 </script>
 {% endblock %}
