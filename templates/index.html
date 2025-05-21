@@ -260,24 +260,31 @@ const input = document.getElementById('new-ticker-input');
 const tickerList = document.getElementById('ticker-list');
 const notifSound = document.getElementById('notif-sound');
 
-let tickers = JSON.parse(localStorage.getItem('tickers') || '{}');  // Now persistent!
+// --- Load tickers from localStorage ---
+let tickers = JSON.parse(localStorage.getItem('tickers') || '{}');  // {TICKER: true}
+let lastSeenIds = {}; // Only in JS memory
 let poller = null;
+let alerting = false;
+let beepInterval = null;
 
-function openPanel() { sidePanel.classList.add('open'); }
-function closePanel() { sidePanel.classList.remove('open'); }
+// --- Panel open/close logic ---
+openBtn.addEventListener('click', () => sidePanel.classList.add('open'));
+closeBtn.addEventListener('click', () => sidePanel.classList.remove('open'));
 
-openBtn.addEventListener('click', openPanel);
-closeBtn.addEventListener('click', closePanel);
-
+// --- Add ticker logic ---
 form.addEventListener('submit', e => {
     e.preventDefault();
     const ticker = input.value.trim().toUpperCase();
     if (!ticker || tickers[ticker]) return;
-    tickers[ticker] = null;
+    tickers[ticker] = true;
+    localStorage.setItem('tickers', JSON.stringify(tickers));
     addTickerToUI(ticker);
     input.value = '';
-    localStorage.setItem('tickers', JSON.stringify(tickers));
     if (!poller) startPolling();
+    // On add, fetch latest article to set as seen (no beep)
+    fetch(`/api/check_ticker?ticker=${ticker}`)
+        .then(res => res.json())
+        .then(data => { if (data && data.id) lastSeenIds[ticker] = data.id; });
 });
 
 function addTickerToUI(ticker) {
@@ -294,24 +301,44 @@ function addTickerToUI(ticker) {
 
 function removeTicker(ticker, liElem) {
     delete tickers[ticker];
-    tickerList.removeChild(liElem);
     localStorage.setItem('tickers', JSON.stringify(tickers));
+    delete lastSeenIds[ticker];
+    tickerList.removeChild(liElem);
     if (Object.keys(tickers).length === 0 && poller) {
         clearInterval(poller);
         poller = null;
     }
 }
 
+// --- On page load, restore UI and set last seen IDs (no beep) ---
+window.addEventListener('DOMContentLoaded', () => {
+    Object.keys(tickers).forEach(ticker => {
+        addTickerToUI(ticker);
+        fetch(`/api/check_ticker?ticker=${ticker}`)
+            .then(res => res.json())
+            .then(data => { if (data && data.id) lastSeenIds[ticker] = data.id; });
+    });
+    if (Object.keys(tickers).length > 0) startPolling();
+});
+
+// --- Polling and Alert Logic ---
 function startPolling() {
     poller = setInterval(async () => {
+        if (alerting) return; // Wait until current alert is cleared
         for (let ticker of Object.keys(tickers)) {
             try {
                 const res = await fetch(`/api/check_ticker?ticker=${ticker}`);
                 const data = await res.json();
-                if (data && data.id && data.id !== tickers[ticker]) {
-                    tickers[ticker] = data.id;
-                    localStorage.setItem('tickers', JSON.stringify(tickers));
-                    notifSound.play();
+                if (data && data.id) {
+                    if (lastSeenIds[ticker] && data.id !== lastSeenIds[ticker]) {
+                        // New article detected!
+                        alerting = true;
+                        showContinuousAlert(ticker, data.title);
+                        lastSeenIds[ticker] = data.id;
+                        break; // Only alert for one at a time
+                    } else if (!lastSeenIds[ticker]) {
+                        lastSeenIds[ticker] = data.id; // First run, set baseline, no alert
+                    }
                 }
             } catch (err) {
                 console.error("Ticker check failed:", err);
@@ -320,24 +347,17 @@ function startPolling() {
     }, 5000);
 }
 
-// On page load, restore tickers and UI
-window.addEventListener('DOMContentLoaded', () => {
-    Object.keys(tickers).forEach(addTickerToUI);
-    if (Object.keys(tickers).length > 0) startPolling();
-
-    // Restore side panel open state if saved
-    if (localStorage.getItem('sidePanelOpen') === 'true') {
-        sidePanel.classList.add('open');
-    }
-});
-
-openBtn.addEventListener('click', () => {
-    sidePanel.classList.add('open');
-    localStorage.setItem('sidePanelOpen', 'true');
-});
-closeBtn.addEventListener('click', () => {
-    sidePanel.classList.remove('open');
-    localStorage.setItem('sidePanelOpen', 'false');
-});
+function showContinuousAlert(ticker, articleTitle) {
+    // Start continuous beep
+    beepInterval = setInterval(() => notifSound.play(), 1000);
+    // Show dialog
+    setTimeout(() => { // Timeout to avoid browser popup blocking
+        if (confirm(`🔔 New article for ${ticker}:\n\n${articleTitle}\n\nPress OK to silence the alert.`)) {
+            clearInterval(beepInterval);
+            beepInterval = null;
+            alerting = false;
+        }
+    }, 200);
+}
 </script>
 {% endblock %}
