@@ -339,22 +339,25 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // --- Polling and Alert Logic ---
 function startPolling() {
+    console.log("Polling started!");
     poller = setInterval(async () => {
-        if (alerting) return; // Wait until current alert is cleared
+        if (alerting) return;
         for (let ticker of Object.keys(tickers)) {
+            console.log("Checking ticker:", ticker);
             try {
                 const res = await fetch(`/api/check_ticker?ticker=${ticker}`);
                 const data = await res.json();
+                console.log("Data for", ticker, ":", data);
                 if (data && data.id) {
                     if (lastSeenIds[ticker] && data.id !== lastSeenIds[ticker]) {
-                        // New article detected!
+                        console.log("Triggering alert for", ticker);
                         alerting = true;
                         showContinuousAlert(ticker, data.title);
                         lastSeenIds[ticker] = data.id;
                         localStorage.setItem('lastSeenIds', JSON.stringify(lastSeenIds));
-                        break; // Only alert for one at a time
+                        break;
                     } else if (!lastSeenIds[ticker]) {
-                        lastSeenIds[ticker] = data.id; // First run, set baseline, no alert
+                        lastSeenIds[ticker] = data.id;
                         localStorage.setItem('lastSeenIds', JSON.stringify(lastSeenIds));
                     }
                 }
