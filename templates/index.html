@@ -339,25 +339,31 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // --- Polling and Alert Logic ---
 function startPolling() {
-    console.log("Polling started!");
     poller = setInterval(async () => {
         if (alerting) return;
         for (let ticker of Object.keys(tickers)) {
-            console.log("Checking ticker:", ticker);
             try {
                 const res = await fetch(`/api/check_ticker?ticker=${ticker}`);
                 const data = await res.json();
-                console.log("Data for", ticker, ":", data);
                 if (data && data.id) {
                     if (lastSeenIds[ticker] && data.id !== lastSeenIds[ticker]) {
-                        console.log("Triggering alert for", ticker);
+                        // New article detected!
+                        console.log("Triggering alert for", ticker, lastSeenIds[ticker], "=>", data.id);
                         alerting = true;
                         showContinuousAlert(ticker, data.title);
                         lastSeenIds[ticker] = data.id;
                         localStorage.setItem('lastSeenIds', JSON.stringify(lastSeenIds));
                         break;
                     } else if (!lastSeenIds[ticker]) {
+                        // Set baseline on first valid article after missing
                         lastSeenIds[ticker] = data.id;
+                        localStorage.setItem('lastSeenIds', JSON.stringify(lastSeenIds));
+                    }
+                } else {
+                    // No article for this ticker in DB: reset last seen
+                    if (lastSeenIds[ticker]) {
+                        console.log(`Resetting lastSeenIds for ${ticker} (no article in DB)`);
+                        delete lastSeenIds[ticker];
                         localStorage.setItem('lastSeenIds', JSON.stringify(lastSeenIds));
                     }
                 }
