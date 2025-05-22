@@ -360,11 +360,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (Object.keys(tickers).length > 0) startPolling();
 });
 
-// --- Polling and Alert Logic ---
-let poller = null;
-let alerting = false;
-let beepInterval = null;
-let seenIds = JSON.parse(localStorage.getItem('seenIds') || '{}'); // {TICKER: [id1, id2]}
 
 function getSeenIds(ticker) {
     return seenIds[ticker] || [];
@@ -468,5 +463,6 @@ window.addEventListener('DOMContentLoaded', () => {
 document.getElementById('silence-alert-btn').addEventListener('click', function () {
     // The modal will close and the beep will be stopped by the 'hidden.bs.modal' event handler
 });
+
 </script>
 {% endblock %}
