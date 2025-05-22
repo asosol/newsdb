@@ -305,16 +305,19 @@ form.addEventListener('submit', e => {
     localStorage.setItem('tickers', JSON.stringify(tickers));
     addTickerToUI(ticker);
     input.value = '';
-    // On add, fetch latest article to set as baseline (if not already in lastSeenIds)
-    if (!(ticker in lastSeenIds)) {
-        fetch(`/api/check_ticker?ticker=${ticker}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.id) {
-                    lastSeenIds[ticker] = data.id;
-                    localStorage.setItem('lastSeenIds', JSON.stringify(lastSeenIds));
-                }
-            });
+// On add, fetch latest N articles to set as baseline (so no beep for existing ones)
+fetch(`/api/check_ticker?ticker=${ticker}&limit=3`)
+    .then(res => res.json())
+    .then(data => {
+        if (Array.isArray(data) && data.length) {
+            // Save all current article IDs for this ticker as "seen"
+            seenIds[ticker] = data.map(a => a.id);
+            localStorage.setItem('seenIds', JSON.stringify(seenIds));
+        } else {
+            seenIds[ticker] = [];
+            localStorage.setItem('seenIds', JSON.stringify(seenIds));
+        }
+    });
     }
     if (!poller) startPolling();
 });
