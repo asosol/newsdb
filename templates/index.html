@@ -361,28 +361,73 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Polling and Alert Logic ---
+let poller = null;
+let alerting = false;
+let beepInterval = null;
+let seenIds = JSON.parse(localStorage.getItem('seenIds') || '{}'); // {TICKER: [id1, id2]}
+
+function getSeenIds(ticker) {
+    return seenIds[ticker] || [];
+}
+function setSeenIds(ticker, ids) {
+    seenIds[ticker] = ids;
+    localStorage.setItem('seenIds', JSON.stringify(seenIds));
+}
+
+function showContinuousAlert(ticker, articleTitle, articleId) {
+    // Save alert to localStorage to persist across reloads
+    localStorage.setItem('pendingAlert', JSON.stringify({ticker, articleTitle, articleId}));
+    document.getElementById('newsAlertBody').innerHTML = `
+        <b>${ticker}</b><br>${articleTitle}
+    `;
+    let alertModal = new bootstrap.Modal(document.getElementById('newsAlertModal'));
+    alertModal.show();
+
+    playBeep();
+    beepInterval = setInterval(playBeep, 1000);
+
+    function handler() {
+        clearInterval(beepInterval);
+        beepInterval = null;
+        alerting = false;
+        localStorage.removeItem('pendingAlert');
+        document.getElementById('newsAlertModal').removeEventListener('hidden.bs.modal', handler);
+    }
+    document.getElementById('newsAlertModal').addEventListener('hidden.bs.modal', handler);
+}
+
+function playBeep() {
+    try {
+        notifSound.pause();
+        notifSound.currentTime = 0;
+        notifSound.play().catch(() => {});
+    } catch (e) {}
+}
+
 function startPolling() {
     poller = setInterval(async () => {
         if (alerting) return;
         for (let ticker of Object.keys(tickers)) {
             try {
-                // Get the latest 3 articles for the ticker
                 const res = await fetch(`/api/check_ticker?ticker=${ticker}&limit=3`);
                 const data = await res.json();
                 if (data && Array.isArray(data) && data.length) {
                     const ids = data.map(a => a.id);
                     const previouslySeen = getSeenIds(ticker);
-                    // Find new articles
                     const newIdx = ids.findIndex(id => !previouslySeen.includes(id));
                     if (newIdx !== -1) {
-                        // Alert on the first truly new article only
                         const newArticle = data[newIdx];
+                        // Don't alert if this is already the pending alert (persisted after reload)
+                        const pendingAlert = JSON.parse(localStorage.getItem('pendingAlert') || 'null');
+                        if (pendingAlert && pendingAlert.ticker === ticker && pendingAlert.articleId === newArticle.id) {
+                            continue;
+                        }
                         alerting = true;
-                        showContinuousAlert(ticker, newArticle.title);
+                        showContinuousAlert(ticker, newArticle.title, newArticle.id);
                         setSeenIds(ticker, ids);
-                        break; // Only one alert at a time
+                        break;
                     } else {
-                        setSeenIds(ticker, ids); // Keep only current IDs
+                        setSeenIds(ticker, ids);
                     }
                 } else {
                     setSeenIds(ticker, []);
@@ -394,36 +439,31 @@ function startPolling() {
     }, 5000);
 }
 
-function showContinuousAlert(ticker, articleTitle) {
-    // Set modal content
-    document.getElementById('newsAlertBody').innerHTML = `
-        <b>${ticker}</b><br>${articleTitle}
-    `;
-    // Show modal
-    let alertModal = new bootstrap.Modal(document.getElementById('newsAlertModal'));
-    alertModal.show();
-
-    // Start beeping repeatedly
-    playBeep(); // Play once right away
-    beepInterval = setInterval(playBeep, 1000);
-
-    // Stop beeping when modal is closed
-    function handler() {
-        clearInterval(beepInterval);
-        beepInterval = null;
-        alerting = false;
-        document.getElementById('newsAlertModal').removeEventListener('hidden.bs.modal', handler);
+// --- On page load, restore UI and set seen IDs (if missing) ---
+window.addEventListener('DOMContentLoaded', () => {
+    Object.keys(tickers).forEach(ticker => {
+        addTickerToUI(ticker);
+        if (!getSeenIds(ticker).length) {
+            fetch(`/api/check_ticker?ticker=${ticker}&limit=3`)
+                .then(res => res.json())
+                .then(data => {
+                    if (Array.isArray(data) && data.length) {
+                        setSeenIds(ticker, data.map(a => a.id));
+                    } else {
+                        setSeenIds(ticker, []);
+                    }
+                });
+        }
+    });
+    // Restore alert if there is one pending
+    const pendingAlert = localStorage.getItem('pendingAlert');
+    if (pendingAlert) {
+        const {ticker, articleTitle, articleId} = JSON.parse(pendingAlert);
+        alerting = true;
+        showContinuousAlert(ticker, articleTitle, articleId);
     }
-    document.getElementById('newsAlertModal').addEventListener('hidden.bs.modal', handler);
-}
-
-function playBeep() {
-    try {
-        notifSound.pause();
-        notifSound.currentTime = 0;
-        notifSound.play().catch(() => {}); // Ignore play errors
-    } catch (e) {}
-}
+    if (Object.keys(tickers).length > 0) startPolling();
+});
 
 document.getElementById('silence-alert-btn').addEventListener('click', function () {
     // The modal will close and the beep will be stopped by the 'hidden.bs.modal' event handler
