@@ -282,6 +282,16 @@ let poller = null;
 let alerting = false;
 let beepInterval = null;
 
+let seenIds = JSON.parse(localStorage.getItem('seenIds') || '{}'); // {TICKER: [id1, id2]}
+
+function getSeenIds(ticker) {
+    return seenIds[ticker] || [];
+}
+function setSeenIds(ticker, ids) {
+    seenIds[ticker] = ids;
+    localStorage.setItem('seenIds', JSON.stringify(seenIds));
+}
+
 // --- Panel open/close logic ---
 openBtn.addEventListener('click', () => sidePanel.classList.add('open'));
 closeBtn.addEventListener('click', () => sidePanel.classList.remove('open'));
@@ -358,29 +368,26 @@ function startPolling() {
         if (alerting) return;
         for (let ticker of Object.keys(tickers)) {
             try {
-                const res = await fetch(`/api/check_ticker?ticker=${ticker}`);
+                // Get the latest 2 (or 3) articles for the ticker
+                const res = await fetch(`/api/check_ticker?ticker=${ticker}&limit=2`);
                 const data = await res.json();
-                if (data && data.id) {
-                    if (lastSeenIds[ticker] && data.id !== lastSeenIds[ticker]) {
-                        // New article detected!
-                        console.log("Triggering alert for", ticker, lastSeenIds[ticker], "=>", data.id);
+                if (data && Array.isArray(data) && data.length) {
+                    const ids = data.map(a => a.id);
+                    const previouslySeen = getSeenIds(ticker);
+                    // Find new articles
+                    const newIdx = ids.findIndex(id => !previouslySeen.includes(id));
+                    if (newIdx !== -1) {
+                        // Alert on the first truly new article only
+                        const newArticle = data[newIdx];
                         alerting = true;
-                        showContinuousAlert(ticker, data.title);
-                        lastSeenIds[ticker] = data.id;
-                        localStorage.setItem('lastSeenIds', JSON.stringify(lastSeenIds));
-                        break;
-                    } else if (!lastSeenIds[ticker]) {
-                        // Set baseline on first valid article after missing
-                        lastSeenIds[ticker] = data.id;
-                        localStorage.setItem('lastSeenIds', JSON.stringify(lastSeenIds));
+                        showContinuousAlert(ticker, newArticle.title);
+                        setSeenIds(ticker, ids);
+                        break; // Only one alert at a time
+                    } else {
+                        setSeenIds(ticker, ids); // Keep only current IDs
                     }
                 } else {
-                    // No article for this ticker in DB: reset last seen
-                    if (lastSeenIds[ticker]) {
-                        console.log(`Resetting lastSeenIds for ${ticker} (no article in DB)`);
-                        delete lastSeenIds[ticker];
-                        localStorage.setItem('lastSeenIds', JSON.stringify(lastSeenIds));
-                    }
+                    setSeenIds(ticker, []);
                 }
             } catch (err) {
                 console.error("Ticker check failed:", err);

@@ -191,18 +191,21 @@ def check_ticker():
     from pg_database import NewsDatabase
     ticker = request.args.get("ticker", "").upper()
     if not ticker:
-        return jsonify({}), 400
+        return jsonify([]), 400
 
+    limit = int(request.args.get("limit", 3))  # Allow ?limit=3, default to 3
     db = NewsDatabase()
-    articles = db.get_articles_by_ticker(ticker, limit=1)
+    articles = db.get_articles_by_ticker(ticker, limit=limit)
     if not articles:
-        return jsonify({})
-    latest = articles[0]
-    return jsonify({
-        "id": latest.id,
-        "title": latest.title,
-        "published": f"{latest.published_date} {latest.published_time}"
-    })
+        return jsonify([])
+    result = []
+    for art in articles:
+        result.append({
+            "id": art.id,
+            "title": art.title,
+            "published": f"{art.published_date} {art.published_time}"
+        })
+    return jsonify(result)
 @app.route('/api/status')
 def api_status():
     return jsonify(scraper_status.get())
