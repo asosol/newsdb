@@ -180,9 +180,24 @@
         </ul>
     </nav>
 </div>
+<!-- Alert Modal -->
+<div class="modal fade" id="newsAlertModal" tabindex="-1" aria-labelledby="newsAlertLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="newsAlertLabel">🔔 News Alert!</h5>
+      </div>
+      <div class="modal-body" id="newsAlertBody"></div>
+      <div class="modal-footer">
+        <button type="button" id="silence-alert-btn" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const rows = document.querySelectorAll('.article-row');
@@ -375,18 +390,26 @@ function startPolling() {
 }
 
 function showContinuousAlert(ticker, articleTitle) {
-    // Try to play beep immediately (should work if user has interacted with page)
-    playBeep();
+    // Set modal content
+    document.getElementById('newsAlertBody').innerHTML = `
+        <b>${ticker}</b><br>${articleTitle}
+    `;
+    // Show modal
+    let alertModal = new bootstrap.Modal(document.getElementById('newsAlertModal'));
+    alertModal.show();
+
+    // Start beeping repeatedly
+    playBeep(); // Play once right away
     beepInterval = setInterval(playBeep, 1000);
 
-    // Show dialog (beeping will continue until OK is clicked)
-    setTimeout(() => {
-        if (confirm(`🔔 New article for ${ticker}:\n\n${articleTitle}\n\nPress OK to silence the alert.`)) {
-            clearInterval(beepInterval);
-            beepInterval = null;
-            alerting = false;
-        }
-    }, 200);
+    // Stop beeping when modal is closed
+    function handler() {
+        clearInterval(beepInterval);
+        beepInterval = null;
+        alerting = false;
+        document.getElementById('newsAlertModal').removeEventListener('hidden.bs.modal', handler);
+    }
+    document.getElementById('newsAlertModal').addEventListener('hidden.bs.modal', handler);
 }
 
 function playBeep() {
@@ -396,5 +419,10 @@ function playBeep() {
         notifSound.play().catch(() => {}); // Ignore play errors
     } catch (e) {}
 }
+
+// Add event listener to the OK button to ensure modal closes and beeping stops
+document.getElementById('silence-alert-btn').addEventListener('click', function () {
+    // The modal will close and the beep will be stopped by the 'hidden.bs.modal' event handler
+});
 </script>
 {% endblock %}
