@@ -85,7 +85,7 @@ class GlobalNewswireScraper:
         import re
         patterns = [
             r'\b(?:NASDAQ|Nasdaq|nasdaq):\s*([A-Z][A-Z0-9\.]{1,10})',
-            r'\b(?:NYSE|Nyse|nyse):\s*([A-Z][A-Z0-9\.]{1,10})'
+            r'\b(?:NYSE|Nyse|nyse)(?:\s+American)?:\s*([A-Z][A-Z0-9\.]{1,10})'
         ]
         found = []
         for pat in patterns:
