@@ -38,9 +38,18 @@ CREATE TABLE IF NOT EXISTS float_data (
     updated_at TEXT NOT NULL
 );
 
+-- User watchlists table for persistent alerts
+CREATE TABLE IF NOT EXISTS user_watchlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker_symbol TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (ticker_symbol)
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_articles_url ON articles (url);
 CREATE INDEX IF NOT EXISTS idx_tickers_symbol ON tickers (symbol);
 CREATE INDEX IF NOT EXISTS idx_article_tickers_article_id ON article_tickers (article_id);
 CREATE INDEX IF NOT EXISTS idx_article_tickers_ticker_id ON article_tickers (ticker_id);
 CREATE INDEX IF NOT EXISTS idx_float_data_ticker_symbol ON float_data (ticker_symbol);
+CREATE INDEX IF NOT EXISTS idx_user_watchlists_ticker ON user_watchlists (ticker_symbol);

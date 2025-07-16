@@ -275,7 +275,7 @@ const input = document.getElementById('new-ticker-input');
 const tickerList = document.getElementById('ticker-list');
 const notifSound = document.getElementById('notif-sound');
 
-let tickers = JSON.parse(localStorage.getItem('tickers') || '{}');       // {TICKER: true}
+let tickers = {};  // Will be loaded from database
 let poller = null;
 let alerting = false;
 let beepInterval = null;
@@ -298,22 +298,41 @@ form.addEventListener('submit', e => {
     e.preventDefault();
     const ticker = input.value.trim().toUpperCase();
     if (!ticker || tickers[ticker]) return;
-    tickers[ticker] = true;
-    localStorage.setItem('tickers', JSON.stringify(tickers));
-    addTickerToUI(ticker);
-    input.value = '';
+    
+    // Add to database
+    fetch('/api/watchlist', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ticker: ticker })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+        }
+        tickers[ticker] = true;
+        addTickerToUI(ticker);
+        input.value = '';
 
-    // On add, fetch latest N articles to set as baseline (so no beep for existing ones)
-    fetch(`/api/check_ticker?ticker=${ticker}&limit=3`)
-        .then(res => res.json())
-        .then(data => {
-            if (Array.isArray(data) && data.length) {
-                setSeenIds(ticker, data.map(a => a.id));
-            } else {
-                setSeenIds(ticker, []);
-            }
-        });
-    if (!poller) startPolling();
+        // On add, fetch latest N articles to set as baseline (so no beep for existing ones)
+        fetch(`/api/check_ticker?ticker=${ticker}&limit=3`)
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data) && data.length) {
+                    setSeenIds(ticker, data.map(a => a.id));
+                } else {
+                    setSeenIds(ticker, []);
+                }
+            });
+        if (!poller) startPolling();
+    })
+    .catch(err => {
+        console.error('Error adding ticker:', err);
+        alert('Failed to add ticker to watchlist');
+    });
 });
 
 function addTickerToUI(ticker) {
@@ -329,45 +348,70 @@ function addTickerToUI(ticker) {
 }
 
 function removeTicker(ticker, liElem) {
-    delete tickers[ticker];
-    localStorage.setItem('tickers', JSON.stringify(tickers));
-    delete seenIds[ticker];
-    localStorage.setItem('seenIds', JSON.stringify(seenIds));
-    tickerList.removeChild(liElem);
-    if (Object.keys(tickers).length === 0 && poller) {
-        clearInterval(poller);
-        poller = null;
-    }
+    // Remove from database
+    fetch(`/api/watchlist/${ticker}`, {
+        method: 'DELETE'
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+        }
+        delete tickers[ticker];
+        delete seenIds[ticker];
+        localStorage.setItem('seenIds', JSON.stringify(seenIds));
+        tickerList.removeChild(liElem);
+        if (Object.keys(tickers).length === 0 && poller) {
+            clearInterval(poller);
+            poller = null;
+        }
+    })
+    .catch(err => {
+        console.error('Error removing ticker:', err);
+        alert('Failed to remove ticker from watchlist');
+    });
 }
 
-// --- On page load, restore UI and set seen IDs (if missing) ---
+// --- On page load, load watchlist from database and restore UI ---
 window.addEventListener('DOMContentLoaded', () => {
-    Object.keys(tickers).forEach(ticker => {
-        addTickerToUI(ticker);
-        // If we have seenIds, keep it; else fetch now to baseline
-        if (!getSeenIds(ticker).length) {
-            fetch(`/api/check_ticker?ticker=${ticker}&limit=3`)
-                .then(res => res.json())
-                .then(data => {
-                    if (Array.isArray(data) && data.length) {
-                        setSeenIds(ticker, data.map(a => a.id));
-                    } else {
-                        setSeenIds(ticker, []);
-                    }
-                });
-        }
-    });
-    if (Object.keys(tickers).length > 0) startPolling();
+    // Load watchlist from database
+    fetch('/api/watchlist')
+        .then(res => res.json())
+        .then(watchlist => {
+            watchlist.forEach(item => {
+                const ticker = item.ticker_symbol;
+                tickers[ticker] = true;
+                addTickerToUI(ticker);
+                
+                // If we have seenIds, keep it; else fetch now to baseline
+                if (!getSeenIds(ticker).length) {
+                    fetch(`/api/check_ticker?ticker=${ticker}&limit=3`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (Array.isArray(data) && data.length) {
+                                setSeenIds(ticker, data.map(a => a.id));
+                            } else {
+                                setSeenIds(ticker, []);
+                            }
+                        });
+                }
+            });
+            if (Object.keys(tickers).length > 0) startPolling();
+            
+            // Restore alert if there is one pending
+            const pendingAlert = localStorage.getItem('pendingAlert');
+            if (pendingAlert) {
+                const {ticker, articleTitle, articleId} = JSON.parse(pendingAlert);
+                alerting = true;
+                showContinuousAlert(ticker, articleTitle, articleId);
+            }
+        })
+        .catch(err => {
+            console.error('Error loading watchlist:', err);
+        });
 });
 
-
-function getSeenIds(ticker) {
-    return seenIds[ticker] || [];
-}
-function setSeenIds(ticker, ids) {
-    seenIds[ticker] = ids;
-    localStorage.setItem('seenIds', JSON.stringify(seenIds));
-}
 
 function showContinuousAlert(ticker, articleTitle, articleId) {
     // Save alert to localStorage to persist across reloads
@@ -434,31 +478,13 @@ function startPolling() {
     }, 5000);
 }
 
-// --- On page load, restore UI and set seen IDs (if missing) ---
-window.addEventListener('DOMContentLoaded', () => {
-    Object.keys(tickers).forEach(ticker => {
-        addTickerToUI(ticker);
-        if (!getSeenIds(ticker).length) {
-            fetch(`/api/check_ticker?ticker=${ticker}&limit=3`)
-                .then(res => res.json())
-                .then(data => {
-                    if (Array.isArray(data) && data.length) {
-                        setSeenIds(ticker, data.map(a => a.id));
-                    } else {
-                        setSeenIds(ticker, []);
-                    }
-                });
-        }
-    });
-    // Restore alert if there is one pending
-    const pendingAlert = localStorage.getItem('pendingAlert');
-    if (pendingAlert) {
-        const {ticker, articleTitle, articleId} = JSON.parse(pendingAlert);
-        alerting = true;
-        showContinuousAlert(ticker, articleTitle, articleId);
-    }
-    if (Object.keys(tickers).length > 0) startPolling();
-});
+// Restore alert if there is one pending
+const pendingAlert = localStorage.getItem('pendingAlert');
+if (pendingAlert) {
+    const {ticker, articleTitle, articleId} = JSON.parse(pendingAlert);
+    alerting = true;
+    showContinuousAlert(ticker, articleTitle, articleId);
+}
 
 document.getElementById('silence-alert-btn').addEventListener('click', function () {
     // The modal will close and the beep will be stopped by the 'hidden.bs.modal' event handler

@@ -31,7 +31,7 @@ class ScraperStatus:
 
 scraper_status = ScraperStatus()
 
-from models import db
+from models import db, UserWatchlist
 from pg_database import NewsDatabase
 from AccesswireScrapper import AccesswireScraper
 from GlobalnewswireScrapper import GlobalNewswireScraper
@@ -86,7 +86,8 @@ def index():
         if val and val.endswith('M'):
             try:
                 num = float(val[:-1])
-                return (num < filter_val) if filter_op == 'lt' else (num > filter_val)
+                if filter_val is not None:
+                    return (num < filter_val) if filter_op == 'lt' else (num > filter_val)
             except Exception:
                 return False
         return False
@@ -209,3 +210,59 @@ def check_ticker():
 @app.route('/api/status')
 def api_status():
     return jsonify(scraper_status.get())
+
+# Watchlist API endpoints for persistent alerts
+@app.route('/api/watchlist', methods=['GET'])
+def get_watchlist():
+    """Get all tickers in the user's watchlist."""
+    try:
+        watchlist = UserWatchlist.query.all()
+        return jsonify([item.to_dict() for item in watchlist])
+    except Exception as e:
+        logger.error(f"Error getting watchlist: {e}")
+        return jsonify([]), 500
+
+@app.route('/api/watchlist', methods=['POST'])
+def add_to_watchlist():
+    """Add a ticker to the user's watchlist."""
+    try:
+        data = request.get_json()
+        ticker = data.get('ticker', '').upper().strip()
+        
+        if not ticker:
+            return jsonify({'error': 'Ticker symbol is required'}), 400
+        
+        # Check if ticker already exists
+        existing = UserWatchlist.query.filter_by(ticker_symbol=ticker).first()
+        if existing:
+            return jsonify({'error': 'Ticker already in watchlist'}), 409
+        
+        # Add to watchlist
+        watchlist_item = UserWatchlist(ticker_symbol=ticker)
+        db.session.add(watchlist_item)
+        db.session.commit()
+        
+        return jsonify(watchlist_item.to_dict()), 201
+    except Exception as e:
+        logger.error(f"Error adding to watchlist: {e}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to add ticker'}), 500
+
+@app.route('/api/watchlist/<ticker>', methods=['DELETE'])
+def remove_from_watchlist(ticker):
+    """Remove a ticker from the user's watchlist."""
+    try:
+        ticker = ticker.upper().strip()
+        
+        watchlist_item = UserWatchlist.query.filter_by(ticker_symbol=ticker).first()
+        if not watchlist_item:
+            return jsonify({'error': 'Ticker not found in watchlist'}), 404
+        
+        db.session.delete(watchlist_item)
+        db.session.commit()
+        
+        return jsonify({'message': f'{ticker} removed from watchlist'}), 200
+    except Exception as e:
+        logger.error(f"Error removing from watchlist: {e}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to remove ticker'}), 500

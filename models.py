@@ -32,7 +32,8 @@ class Article(db.Model):
     # Relationship to tickers
     tickers = db.relationship(
         'Ticker', secondary=article_tickers,
-        backref=db.backref('articles', lazy='dynamic')
+        backref=db.backref('articles', lazy='dynamic'),
+        lazy='dynamic'
     )
 
     def __repr__(self):
@@ -49,7 +50,7 @@ class Article(db.Model):
             'published_date': self.published_date.strftime('%Y-%m-%d') if self.published_date else '',
             'published_time': self.published_time.strftime('%H:%M') if self.published_time else '',
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'tickers': [t.symbol for t in self.tickers]
+            'tickers': [t.symbol for t in self.tickers.all()]
         }
 
 class Ticker(db.Model):
@@ -64,24 +65,43 @@ class Ticker(db.Model):
         return f"<Ticker {self.symbol}>"
 
 class FloatData(db.Model):
-    """Model for stock float data."""
+    """Model for float data associated with tickers."""
     __tablename__ = 'float_data'
     id = db.Column(db.Integer, primary_key=True)
-    ticker_id = db.Column(db.Integer, db.ForeignKey('tickers.id', ondelete='CASCADE'), unique=True)
-    ticker_symbol = db.Column(db.String(20), unique=True, nullable=False)
+    ticker_symbol = db.Column(db.String(20), db.ForeignKey('tickers.symbol'), unique=True, nullable=False)
     company_name = db.Column(db.String(200))
     float_value = db.Column(db.String(50))
     price = db.Column(db.String(50))
     market_cap = db.Column(db.String(50))
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def __repr__(self):
-        return f"<FloatData {self.ticker_symbol}>"
-
     def to_dict(self):
+        """Convert float data to dictionary."""
         return {
+            'symbol': self.ticker_symbol,
             'name': self.company_name,
             'float': self.float_value,
             'price': self.price,
             'market_cap': self.market_cap
+        }
+
+    def __repr__(self):
+        return f"<FloatData {self.ticker_symbol}: {self.float_value}>"
+
+class UserWatchlist(db.Model):
+    """Model for user watchlists (persistent alerts)."""
+    __tablename__ = 'user_watchlists'
+    id = db.Column(db.Integer, primary_key=True)
+    ticker_symbol = db.Column(db.String(20), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<UserWatchlist {self.ticker_symbol}>"
+
+    def to_dict(self):
+        """Convert watchlist item to dictionary."""
+        return {
+            'id': self.id,
+            'ticker_symbol': self.ticker_symbol,
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }
